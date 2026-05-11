@@ -4,7 +4,7 @@ import { serve } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
 import * as pty from "node-pty";
 import { listSessions } from "./sessions.js";
-import { renderLanding, renderTerminal } from "./frontend.js";
+import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from "./frontend.js";
 
 type ClientMessage =
 	| { type: "input"; data: string }
@@ -22,6 +22,15 @@ app.get("/", (c) => {
 app.get("/s/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	return c.html(renderTerminal(session));
+});
+
+app.get("/notes", (c) => {
+	return c.html(renderNotesIndex());
+});
+
+app.get("/notes/:session", (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	return c.html(renderNotesPage(session));
 });
 
 const port = parseInt(process.env.PORT || "3000", 10);

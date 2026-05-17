@@ -40,7 +40,7 @@ await db.read();
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
-	if (ext.start) spawnExtensionBackend(path.join(extsDir, ext.id), ext);
+	if (ext.start) await spawnExtensionBackend(ext.dir, ext);
 }
 
 const now = Date.now();

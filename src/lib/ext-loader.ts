@@ -1,7 +1,9 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer } from 'node:net';
 import path from 'node:path';
+import os from 'node:os';
 import type { Hono } from 'hono';
 
 export interface ExtManifest {
@@ -14,38 +16,97 @@ export interface ExtManifest {
   backend?:    string;
   start?:      string;
   config:      unknown;
+  /** Absolute path to the extension root directory (set by loader, not from JSON). */
+  dir:         string;
+}
+
+interface TmuxWebConfig {
+  plugins?: string[];
+}
+
+const CONFIG_PATH = path.join(os.homedir(), '.config', 'tmux-web', 'settings.json');
+
+async function readConfig(): Promise<TmuxWebConfig> {
+  try {
+    return JSON.parse(await readFile(CONFIG_PATH, 'utf-8')) as TmuxWebConfig;
+  } catch {
+    return {};
+  }
+}
+
+async function tryLoadManifest(extDir: string): Promise<ExtManifest | null> {
+  const manifestPath = path.join(extDir, 'tmux-extension.json');
+  if (!existsSync(manifestPath)) return null;
+  try {
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf-8')) as ExtManifest;
+    manifest.dir = extDir;
+    return manifest;
+  } catch (err: any) {
+    console.warn(`[extensions] Failed to load ${manifestPath}: ${err.message}`);
+    return null;
+  }
+}
+
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const port = (srv.address() as { port: number }).port;
+      srv.close(() => resolve(port));
+    });
+    srv.on('error', reject);
+  });
+}
+
+/** Resolve a plugin package name to its directory inside node_modules. */
+function resolvePluginDir(pkgName: string): string | null {
+  const dir = path.join(process.cwd(), 'node_modules', pkgName);
+  return existsSync(dir) ? dir : null;
 }
 
 export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
-  if (!existsSync(extsDir)) return [];
+  const seen = new Set<string>();
+  const all:  ExtManifest[] = [];
 
-  const entries = await readdir(extsDir, { withFileTypes: true });
-  const manifests: ExtManifest[] = [];
+  function collect(m: ExtManifest) {
+    if (seen.has(m.id)) return;
+    seen.add(m.id);
+    all.push(m);
+  }
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const manifestPath = path.join(extsDir, entry.name, 'tmux-extension.json');
-    if (!existsSync(manifestPath)) continue;
-
-    try {
-      const raw = await readFile(manifestPath, 'utf-8');
-      const manifest = JSON.parse(raw) as ExtManifest;
-      // Ensure id matches directory name
-      manifest.id = entry.name;
-      manifests.push(manifest);
-    } catch (err: any) {
-      console.warn(`[extensions] Failed to load ${manifestPath}: ${err.message}`);
+  // 1. Local extensions/ — dev overrides, always loaded
+  if (existsSync(extsDir)) {
+    const entries = await readdir(extsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const m = await tryLoadManifest(path.join(extsDir, entry.name));
+      if (m) collect(m);
     }
   }
 
-  return manifests;
+  // 2. Plugins listed in ~/.config/tmux-web/settings.json
+  const cfg = await readConfig();
+  for (const pkgName of cfg.plugins ?? []) {
+    const pkgDir = resolvePluginDir(pkgName);
+    if (!pkgDir) {
+      console.warn(`[extensions] Plugin "${pkgName}" not found in node_modules — run: npm install ${pkgName}`);
+      continue;
+    }
+    const m = await tryLoadManifest(pkgDir);
+    if (m) collect(m);
+  }
+
+  return all;
 }
 
-export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): ChildProcess {
+export async function spawnExtensionBackend(extDir: string, manifest: ExtManifest): Promise<ChildProcess> {
+  const port = await findFreePort();
+  manifest.backend = `http://127.0.0.1:${port}`;
+
   const [cmd, ...args] = (manifest.start as string).split(' ');
   const child = spawn(cmd, args, {
     cwd: extDir,
-    env: { ...process.env },
+    env: { ...process.env, EXT_PORT: String(port) },
     stdio: 'pipe',
   });
 
@@ -61,12 +122,12 @@ export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): Ch
 
 export function registerExtensionRoutes(
   app: Hono,
-  extsDir: string,
+  _extsDir: string,
   manifests: ExtManifest[],
 ): void {
   for (const manifest of manifests) {
     const id      = manifest.id;
-    const uiDir   = path.join(extsDir, id, 'ui');
+    const uiDir   = path.join(manifest.dir, 'ui');
     const backend = manifest.backend;
 
     // ── Static UI files: GET /ext/:id/ui/* ─────────────────────────────────

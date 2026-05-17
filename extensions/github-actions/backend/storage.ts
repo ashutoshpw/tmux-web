@@ -1,7 +1,9 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 
-const DATA_FILE = path.join(process.cwd(), 'data.json');
+const DATA_DIR  = path.join(os.homedir(), '.tmux-web');
+const DATA_FILE = path.join(DATA_DIR, 'ext-github-actions.json');
 
 interface Store {
   sessions: Record<string, string[]>;
@@ -16,6 +18,7 @@ async function read(): Promise<Store> {
 }
 
 async function save(store: Store): Promise<void> {
+  await mkdir(DATA_DIR, { recursive: true });
   await writeFile(DATA_FILE, JSON.stringify(store, null, 2));
 }
 

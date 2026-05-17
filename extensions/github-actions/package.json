@@ -2,6 +2,12 @@
   "name": "@tmux-web/ext-github-actions",
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist/",
+    "ui/app.js",
+    "ui/index.html",
+    "tmux-extension.json"
+  ],
   "scripts": {
     "build:backend": "tsc -p tsconfig.json",
     "build:ui": "esbuild ui/app.ts --bundle --outfile=ui/app.js --platform=browser --target=es2020 --alias:@tmux-web/ext-sdk=./backend/index.ts",

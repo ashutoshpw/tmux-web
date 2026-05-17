@@ -1,0 +1,20 @@
+{
+  "name": "@tmux-web/ext-github-actions",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build:backend": "tsc -p tsconfig.json",
+    "build:ui": "esbuild ui/app.ts --bundle --outfile=ui/app.js --platform=browser --target=es2020 --alias:@tmux-web/ext-sdk=./backend/index.ts",
+    "build": "npm run build:backend && npm run build:ui",
+    "start": "node dist/backend/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}

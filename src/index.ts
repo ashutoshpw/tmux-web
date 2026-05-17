@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
@@ -7,6 +8,7 @@ import * as pty from "node-pty";
 import { listSessions } from "./sessions.js";
 import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from "./frontend.js";
 import { db, type StoredTask } from "./lib/db.js";
+import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
 
 type ClientMessage =
 	| { type: "input"; data: string }
@@ -35,6 +37,12 @@ function fireTask(id: string, sessionName: string, windowIndex: number, text: st
 // Init db and re-schedule surviving tasks before starting server
 await db.read();
 
+const extsDir   = path.join(process.cwd(), "extensions");
+const extensions = await loadExtensions(extsDir);
+for (const ext of extensions) {
+	if (ext.start) spawnExtensionBackend(path.join(extsDir, ext.id), ext);
+}
+
 const now = Date.now();
 const missed: string[] = [];
 for (const task of db.data.scheduledTasks) {
@@ -56,6 +64,8 @@ if (missed.length) {
 
 const app = new Hono();
 
+registerExtensionRoutes(app, extsDir, extensions);
+
 // ── Page routes ────────────────────────────────────────────────────────────
 
 app.get("/", (c) => {
@@ -65,7 +75,7 @@ app.get("/", (c) => {
 
 app.get("/s/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
-	return c.html(renderTerminal(session));
+	return c.html(renderTerminal(session, extensions));
 });
 
 app.get("/notes", (c) => {

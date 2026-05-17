@@ -1,0 +1,14 @@
+{
+  "sessions": {
+    "test": [
+      "https://github.com/W3Mirror/arb-monorepo/actions/workflows/deploy-preview-next-dash.yml"
+    ],
+    "mysession": [
+      "https://github.com/W3Mirror/arb-monorepo/actions/workflows/deploy-preview-next-dash.yml"
+    ],
+    "accounting": [
+      "https://github.com/W3Mirror/arb-monorepo/actions/workflows/deploy-preview-next-dash.yml",
+      "https://github.com/W3Mirror/arb-monorepo/actions/workflows/ci.yml"
+    ]
+  }
+}

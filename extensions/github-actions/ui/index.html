@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    :root {
+      --bg:      #11161d;
+      --border:  #243241;
+      --fg:      #d0d0d0;
+      --muted:   #8a97a6;
+      --accent:  #f3f7fb;
+      --success: #73c991;
+      --danger:  #f14c4c;
+      --warn:    #e9c46a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace, ui-monospace;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    #header {
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--border);
+    }
+    #session-label { font-size: 10px; color: var(--muted); }
+
+    /* ── Add workflow form ───────────────────────────────────────────────────── */
+    #add-form {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    #add-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    #wf-input {
+      flex: 1;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--fg);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 7px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    #wf-input::placeholder { color: var(--muted); }
+    #wf-input:focus { border-color: rgba(125,211,252,0.4); }
+    #add-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 4px 8px;
+      transition: color 0.12s, border-color 0.12s;
+      white-space: nowrap;
+    }
+    #add-btn:hover { color: var(--accent); border-color: var(--accent); }
+    #wf-input-err { font-size: 10px; color: var(--danger); min-height: 14px; }
+
+    /* ── Loading ─────────────────────────────────────────────────────────────── */
+    #loading {
+      padding: 24px 12px;
+      color: var(--muted);
+      text-align: center;
+    }
+    #loading::after {
+      content: '';
+      display: inline-block;
+      width: 10px;
+      animation: dots 1.2s steps(3, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: ''; }
+      33%  { content: '.'; }
+      66%  { content: '..'; }
+      100% { content: '...'; }
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+    #empty-state {
+      display: none;
+      padding: 20px 12px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    /* ── Workflow rows ───────────────────────────────────────────────────────── */
+    #runs { display: none; }
+
+    .wf-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      min-height: 40px;
+    }
+    .wf-row:last-child { border-bottom: none; }
+    .wf-row:hover { background: rgba(255,255,255,0.03); }
+
+    .wf-icon {
+      font-size: 14px;
+      width: 18px;
+      flex-shrink: 0;
+      text-align: center;
+      font-weight: 600;
+    }
+    .wf-spin { display: inline-block; animation: spin 1.2s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .wf-body { flex: 1; overflow: hidden; min-width: 0; }
+    .wf-name {
+      color: var(--fg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+    }
+    .wf-meta { color: var(--muted); font-size: 10px; margin-top: 1px; }
+
+    .wf-actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+
+    .wf-link, .wf-btn, .wf-remove {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      padding: 2px 5px;
+      text-decoration: none;
+      transition: color 0.12s, border-color 0.12s;
+      display: flex;
+      align-items: center;
+    }
+    .wf-link:hover, .wf-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .wf-remove:hover { color: var(--danger); border-color: var(--danger); }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+    #footer {
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    #refresh-btn {
+      background: none; border: none;
+      color: var(--muted); cursor: pointer;
+      font-size: 10px; font-family: inherit;
+    }
+    #refresh-btn:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div id="session-label">session: —</div>
+</div>
+
+<div id="add-form">
+  <div id="add-row">
+    <input id="wf-input" type="url" placeholder="https://github.com/owner/repo/actions/workflows/ci.yml" />
+    <button id="add-btn" onclick="addWorkflow()">+ Add</button>
+  </div>
+  <div id="wf-input-err"></div>
+</div>
+
+<div id="loading">connecting</div>
+
+<div id="empty-state">
+  No workflows yet.<br>
+  Paste a GitHub Actions workflow URL above.
+</div>
+
+<div id="runs"></div>
+
+<div id="footer">
+  <span id="last-refresh">—</span>
+  <button id="refresh-btn" onclick="manualRefresh()">↻ refresh</button>
+</div>
+
+<script>
+  function updateTimestamp() {
+    const el = document.getElementById('last-refresh');
+    if (el) el.textContent = 'updated ' + new Date().toLocaleTimeString();
+  }
+
+  function manualRefresh() {
+    window.__refresh?.();
+    updateTimestamp();
+  }
+</script>
+
+<script src="app.js"></script>
+
+</body>
+</html>

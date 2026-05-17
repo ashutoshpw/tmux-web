@@ -1,0 +1,17 @@
+{
+  "id": "github-actions",
+  "name": "GitHub Actions",
+  "icon": "⚡",
+  "slot": "sidebar",
+  "permissions": [
+    "network:api.github.com"
+  ],
+  "views": [
+    { "entry": "index.html" }
+  ],
+  "backend": "http://localhost:4100",
+  "start": "node dist/backend/server.js",
+  "config": {
+    "pollIntervalMs": 60000
+  }
+}

@@ -1,0 +1,40 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const DATA_FILE = path.join(process.cwd(), 'data.json');
+
+interface Store {
+  sessions: Record<string, string[]>;
+}
+
+async function read(): Promise<Store> {
+  try {
+    return JSON.parse(await readFile(DATA_FILE, 'utf-8'));
+  } catch {
+    return { sessions: {} };
+  }
+}
+
+async function save(store: Store): Promise<void> {
+  await writeFile(DATA_FILE, JSON.stringify(store, null, 2));
+}
+
+export async function getWorkflows(session: string): Promise<string[]> {
+  const store = await read();
+  return store.sessions[session] ?? [];
+}
+
+export async function addWorkflow(session: string, url: string): Promise<string[]> {
+  const store = await read();
+  store.sessions[session] ??= [];
+  if (!store.sessions[session].includes(url)) store.sessions[session].push(url);
+  await save(store);
+  return store.sessions[session];
+}
+
+export async function removeWorkflow(session: string, index: number): Promise<string[]> {
+  const store = await read();
+  store.sessions[session]?.splice(index, 1);
+  await save(store);
+  return store.sessions[session] ?? [];
+}

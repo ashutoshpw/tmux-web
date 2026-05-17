@@ -1,8 +1,109 @@
 import { cssVarsStyle } from '../theme.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import { schedulerDrawerCSS, schedulerDrawerHTML, schedulerDrawerScript } from '../scheduler-drawer.js';
+import type { ExtManifest } from '../ext-loader.js';
 
-export function renderTerminal(sessionName: string): string {
+function extDrawerCSS(): string {
+	return `
+  .ext-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 999;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+  }
+  .ext-backdrop.open { opacity: 1; pointer-events: auto; }
+  .ext-drawer {
+    position: fixed; right: 0; top: 0; height: 100%; width: 360px; z-index: 1000;
+    background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+    display: flex; flex-direction: column;
+    transform: translateX(100%); transition: transform 0.25s ease;
+  }
+  .ext-drawer.open { transform: translateX(0); }
+  .ext-drawer .drawer-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--panel-border);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--panel-accent); font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+  }
+  .ext-drawer .drawer-header button {
+    background: none; border: none; color: var(--panel-muted); cursor: pointer;
+    font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 4px; transition: color 0.15s;
+  }
+  .ext-drawer .drawer-header button:hover { color: var(--panel-accent); }
+  .ext-drawer iframe { flex: 1; border: none; width: 100%; height: 0; }
+  header .ext-btn {
+    display: flex; align-items: center; gap: 4px;
+    background: none; border: none; color: var(--panel-muted); cursor: pointer;
+    padding: 2px 6px; border-radius: 4px; transition: color 0.15s; font-size: 13px;
+  }
+  header .ext-btn:hover { color: var(--panel-accent); }`;
+}
+
+function extDrawerHTML(manifest: ExtManifest): string {
+	const id = manifest.id;
+	return `
+<div id="ext-${id}-backdrop" class="ext-backdrop"></div>
+<div id="ext-${id}-drawer" class="ext-drawer">
+  <div class="drawer-header">
+    <span>${manifest.icon} ${manifest.name}</span>
+    <button id="ext-${id}-close">&times;</button>
+  </div>
+  <iframe id="ext-${id}-frame" src="/ext/${id}/ui/index.html"></iframe>
+</div>`;
+}
+
+function extDrawerScript(manifest: ExtManifest, sessionName: string): string {
+	const id      = manifest.id;
+	const cfgJson = JSON.stringify(manifest.config);
+	return `
+(function() {
+  const backdrop = document.getElementById('ext-${id}-backdrop');
+  const drawer   = document.getElementById('ext-${id}-drawer');
+  const frame    = document.getElementById('ext-${id}-frame');
+  const toggle   = document.getElementById('ext-${id}-toggle');
+  const close    = document.getElementById('ext-${id}-close');
+
+  function openDrawer() {
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+  }
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    backdrop.classList.remove('open');
+  }
+
+  toggle.addEventListener('click', () => {
+    drawer.classList.contains('open') ? closeDrawer() : openDrawer();
+  });
+  close.addEventListener('click', closeDrawer);
+  backdrop.addEventListener('click', closeDrawer);
+
+  const cfg = ${cfgJson};
+
+  function sendMessages() {
+    frame.contentWindow.postMessage({ type: 'ext:context', context: { session: ${JSON.stringify(sessionName)}, host: location.origin } }, '*');
+    frame.contentWindow.postMessage({ type: 'ext:config',  config: cfg }, '*');
+  }
+
+  // Defensive: if iframe already loaded (shouldn't happen), send immediately
+  if (frame.contentDocument && frame.contentDocument.readyState === 'complete') {
+    sendMessages();
+  } else {
+    frame.addEventListener('load', sendMessages, { once: true });
+  }
+
+  window.addEventListener('message', (e) => {
+    if (e.data?.type === 'ext:resize' && e.source === frame.contentWindow) {
+      frame.style.height = e.data.height + 'px';
+    }
+    // ext:ready fires when the bridge initialises — send (or re-send) config
+    if (e.data?.type === 'ext:ready' && e.source === frame.contentWindow) {
+      sendMessages();
+    }
+  });
+}());`;
+}
+
+export function renderTerminal(sessionName: string, extensions: ExtManifest[] = []): string {
+	const sidebarExts = extensions.filter(e => e.slot === 'sidebar');
 	return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -63,6 +164,7 @@ export function renderTerminal(sessionName: string): string {
   header .notes-btn svg { width: 15px; height: 15px; fill: currentColor; }
   ${notesDrawerCSS()}
   ${schedulerDrawerCSS()}
+  ${extDrawerCSS()}
 </style>
 </head>
 <body>
@@ -75,6 +177,7 @@ export function renderTerminal(sessionName: string): string {
   <button class="sched-btn" id="sched-toggle" title="Schedule command">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
   </button>
+  ${sidebarExts.map(e => `<button class="ext-btn" id="ext-${e.id}-toggle" title="${e.name}">${e.icon}</button>`).join('\n  ')}
   <div class="status">
     <div class="dot" id="status-dot"></div>
     <span id="status-text">connecting</span>
@@ -83,6 +186,7 @@ export function renderTerminal(sessionName: string): string {
 <div id="terminal-container"></div>
 ${notesDrawerHTML(`Notes — ${sessionName}`)}
 ${schedulerDrawerHTML(`Scheduler — ${sessionName}`)}
+${sidebarExts.map(e => extDrawerHTML(e)).join('\n')}
 
 <script type="module">
 import { init, Terminal } from 'https://esm.sh/ghostty-web@latest';
@@ -319,7 +423,16 @@ ${notesDrawerScript(`session:${sessionName}`)}
 
 // ========== SCHEDULER ==========
 ${schedulerDrawerScript(sessionName)}
+
+// ========== NOTES ==========
+// (notes and scheduler scripts already included above — extensions below)
 </script>
+
+${sidebarExts.length > 0 ? `<script>
+// Extension bootstrap — plain script (not module) so it runs before the module
+// awaits ghostty-web, avoiding a race where iframes load during that await.
+${sidebarExts.map(e => extDrawerScript(e, sessionName)).join('\n')}
+</script>` : ''}
 </body>
 </html>`;
 }

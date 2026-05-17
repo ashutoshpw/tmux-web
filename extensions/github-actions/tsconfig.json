@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "rootDir": "backend",
+    "outDir": "dist/backend",
+    "paths": {
+      "@tmux-web/ext-sdk": ["./backend/index.ts"]
+    }
+  },
+  "include": ["backend"]
+}

@@ -9,6 +9,34 @@ import { listSessions } from "./sessions.js";
 import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from "./frontend.js";
 import { db, type StoredTask } from "./lib/db.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
+import { cmdAdd, cmdRemove, cmdList, printUsage } from "./lib/cli.js";
+
+// ── CLI subcommand dispatch ───────────────────────────────────────────────
+// Runs before any server setup so `tmux-web add/remove/list` are fast and
+// don't try to bind a port or load the db.
+{
+	const [sub, arg] = process.argv.slice(2);
+	switch (sub) {
+		case "add":
+			if (!arg) { console.error("usage: tmux-web add <package>"); process.exit(1); }
+			await cmdAdd(arg);
+			process.exit(0);
+		case "remove":
+		case "rm":
+			if (!arg) { console.error("usage: tmux-web remove <package>"); process.exit(1); }
+			await cmdRemove(arg);
+			process.exit(0);
+		case "list":
+		case "ls":
+			await cmdList();
+			process.exit(0);
+		case "help":
+		case "--help":
+		case "-h":
+			printUsage();
+			process.exit(0);
+	}
+}
 
 type ClientMessage =
 	| { type: "input"; data: string }

@@ -65,8 +65,17 @@ async function tryLoadManifest(extDir: string): Promise<ExtManifest | null> {
 }
 
 function resolvePluginDir(pkgName: string): string | null {
-  const dir = path.join(process.cwd(), 'node_modules', pkgName);
-  return existsSync(dir) ? dir : null;
+  // Canonical: ~/.tmux-web/node_modules/ — managed by `tmux-web add`.
+  // Fallback: <cwd>/node_modules/ — for project-local development.
+  const searchPaths = [
+    path.join(os.homedir(), '.tmux-web', 'node_modules'),
+    path.join(process.cwd(), 'node_modules'),
+  ];
+  for (const base of searchPaths) {
+    const dir = path.join(base, pkgName);
+    if (existsSync(dir)) return dir;
+  }
+  return null;
 }
 
 export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
@@ -94,7 +103,7 @@ export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
   for (const pkgName of cfg.plugins ?? []) {
     const pkgDir = resolvePluginDir(pkgName);
     if (!pkgDir) {
-      console.warn(`[extensions] Plugin "${pkgName}" not found in node_modules — run: npm install ${pkgName}`);
+      console.warn(`[extensions] Plugin "${pkgName}" not installed — run: tmux-web add ${pkgName}`);
       continue;
     }
     const m = await tryLoadManifest(pkgDir);

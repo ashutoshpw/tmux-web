@@ -134,6 +134,15 @@ export function renderTerminal(sessionName: string, extensions: ExtManifest[] = 
     font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace;
     white-space: nowrap;
   }
+  header h1 a {
+    color: inherit;
+    text-decoration: none;
+  }
+  header h1 a:hover,
+  header h1 a:focus-visible {
+    color: var(--panel-success);
+    outline: none;
+  }
   header .session {
     font-size: 11px;
     color: var(--panel-muted);
@@ -169,7 +178,7 @@ export function renderTerminal(sessionName: string, extensions: ExtManifest[] = 
 </head>
 <body>
 <header>
-  <h1>tmux</h1>
+  <h1><a href="/" aria-label="Go to home">tmux</a></h1>
   <span class="session">${sessionName}</span>
   <button class="notes-btn" id="notes-toggle" title="Session notes">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/></svg>

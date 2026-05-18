@@ -147,7 +147,9 @@ function startEditing() {
 async function stopEditing() {
   if (!editing) return;
   editing = false;
-  notePlain = notesEditor.textContent || '';
+  // innerText (not textContent): Enter in contenteditable inserts <br> or blocks;
+  // textContent drops those breaks and merges lines.
+  notePlain = (notesEditor.innerText ?? '').replace(/\\r\\n/g, '\\n');
   notesEditor.contentEditable = 'false';
   notesEditor.innerHTML = linkifyHTML(escapeHTML(notePlain));
   editBadge.classList.remove('show');

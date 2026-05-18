@@ -1,6 +1,6 @@
 {
   "name": "tmux-web",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Access tmux sessions from your browser via a web-based terminal",
   "type": "module",
   "bin": {

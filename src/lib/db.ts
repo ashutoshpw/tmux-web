@@ -19,9 +19,15 @@ export interface StoredTask {
 	createdAt: number;
 }
 
+export interface SessionAccessRecord {
+	name: string;
+	lastAccessedAt: number; // ms timestamp
+}
+
 interface DbSchema {
 	notes: NoteRecord[];
 	scheduledTasks: StoredTask[];
+	sessionAccess: SessionAccessRecord[];
 }
 
 const dbDir = getDataRoot();
@@ -29,5 +35,5 @@ mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(
 	new JSONFile<DbSchema>(join(dbDir, 'db.json')),
-	{ notes: [], scheduledTasks: [] },
+	{ notes: [], scheduledTasks: [], sessionAccess: [] },
 );

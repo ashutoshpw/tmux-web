@@ -8,6 +8,7 @@ import * as pty from "node-pty";
 import { listSessions } from "./sessions.js";
 import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from "./frontend.js";
 import { db, type StoredTask } from "./lib/db.js";
+import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
 import { cmdAdd, cmdRemove, cmdList, printUsage } from "./lib/cli.js";
 
@@ -65,6 +66,7 @@ function fireTask(id: string, sessionName: string, windowIndex: number, text: st
 
 // Init db and re-schedule surviving tasks before starting server
 await db.read();
+db.data.sessionAccess ??= [];
 
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
@@ -98,12 +100,15 @@ registerExtensionRoutes(app, extsDir, extensions);
 // ── Page routes ────────────────────────────────────────────────────────────
 
 app.get("/", (c) => {
+	const view = c.req.query("view") === "recent" ? "recent" : "default";
 	const sessions = listSessions();
-	return c.html(renderLanding(sessions));
+	const accessMap = getSessionAccessMap();
+	return c.html(renderLanding(sessions, { view, accessMap }));
 });
 
-app.get("/s/:session", (c) => {
+app.get("/s/:session", async (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
+	await recordSessionAccess(session);
 	return c.html(renderTerminal(session, extensions));
 });
 

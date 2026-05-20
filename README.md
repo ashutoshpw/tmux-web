@@ -28,7 +28,7 @@ Then open `http://localhost:3000` in your browser. You'll see a list of active t
 
 ## Notes
 
-Every session has a built-in notes drawer — click the notepad icon in the session header to open a Markdown scratchpad that auto-saves to `~/.tmux-web/db.json`. The landing page also has a **global** notes drawer plus a `/notes` index page that lists every per-session note you've written.
+Every session has a built-in notes drawer — click the notepad icon in the session header to open a Markdown scratchpad that auto-saves to `~/.tmux-web/db.json` (or `~/.dev/.tmux-web/db.json` when running in dev mode).
 
 **Example:** While debugging in a `staging-debug` session, jot down the failing request IDs and the commit you bisected to. Re-open the session tomorrow and the notes are still there, scoped to that session name.
 
@@ -48,7 +48,7 @@ tmux-web list                                 # show enabled plugins
 tmux-web remove @tmux-web/ext-github-actions  # uninstall + disable
 ```
 
-Enabled plugins live in `~/.config/tmux-web/settings.json`; installed packages live in `~/.tmux-web/node_modules/`. Build your own with a `tmux-extension.json` manifest, a Hono backend on a Unix socket, and an iframe UI — full guide in [`docs/extensions.md`](docs/extensions.md).
+Enabled plugins live in `~/.config/tmux-web/settings.json`; installed packages live in `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` in dev mode). Build your own with a `tmux-extension.json` manifest, a Hono backend on a Unix socket, and an iframe UI — full guide in [`docs/extensions.md`](docs/extensions.md).
 
 **Example:** Add the GitHub Actions extension and the sidebar shows live run status for the repo you're working in — flip to a red dot the moment a deploy starts failing, without leaving the terminal.
 
@@ -56,13 +56,13 @@ Enabled plugins live in `~/.config/tmux-web/settings.json`; installed packages l
 
 - **Node.js** >= 18
 - **tmux** installed and available in your PATH
-- Writable `~/.tmux-web/` and `~/.config/tmux-web/` for plugin installs, notes, and scheduled tasks
+- Writable `~/.tmux-web/` (or `~/.dev/.tmux-web/` in dev mode) and `~/.config/tmux-web/` for plugin installs, notes, and scheduled tasks
 
 ## How it works
 
 - The landing page lists all active tmux sessions; clicking one opens a full terminal view powered by [ghostty-web](https://github.com/nickolay/ghostty-web)
 - The browser connects to the server over WebSocket, which spawns `tmux attach-session` via a PTY — resize, input, and scrollback all work, and the client auto-reconnects if the connection drops
-- The notes drawer (per-session and global) persists to `~/.tmux-web/db.json` via lowdb
+- The notes drawer (per-session and global) persists to `~/.tmux-web/db.json` via lowdb (or `~/.dev/.tmux-web/db.json` in dev mode)
 - The scheduler queues `tmux send-keys` calls to fire after a delay and re-arms surviving tasks on restart
 - Sidebar extensions run as isolated child processes; the host reverse-proxies `/ext/<id>/api/*` to each extension over a Unix socket — see [`docs/extensions.md`](docs/extensions.md)
 

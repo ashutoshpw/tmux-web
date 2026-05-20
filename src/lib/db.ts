@@ -1,8 +1,8 @@
 import { Low } from 'lowdb';
 import { JSONFile } from 'lowdb/node';
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getDataRoot } from './state-paths.js';
 
 export interface NoteRecord {
 	scope: string;     // "__global__" | "session:name"
@@ -24,7 +24,7 @@ interface DbSchema {
 	scheduledTasks: StoredTask[];
 }
 
-const dbDir = join(homedir(), '.tmux-web');
+const dbDir = getDataRoot();
 mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(

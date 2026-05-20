@@ -2,10 +2,13 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
+const DATA_ROOT = process.env.TMUX_WEB_DATA_ROOT
+  ?? path.join(os.homedir(), '.tmux-web');
+
 // Host (tmux-web) injects EXT_DATA_DIR; fallback only matters when running the
 // extension standalone for local dev.
 const DATA_DIR  = process.env.EXT_DATA_DIR
-  ?? path.join(os.homedir(), '.tmux-web', 'extensions', 'github-actions');
+  ?? path.join(DATA_ROOT, 'extensions', 'github-actions');
 const DATA_FILE = path.join(DATA_DIR, 'data.json');
 
 interface Store {

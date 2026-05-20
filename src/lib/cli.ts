@@ -3,8 +3,10 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { getDataRoot } from './state-paths.js';
 
-const PLUGIN_DIR  = path.join(os.homedir(), '.tmux-web');
+const DATA_ROOT   = getDataRoot();
+const PLUGIN_DIR  = DATA_ROOT;
 const CONFIG_PATH = path.join(os.homedir(), '.config', 'tmux-web', 'settings.json');
 
 interface Settings {
@@ -88,6 +90,8 @@ export async function cmdList(): Promise<void> {
 }
 
 export function printUsage(): void {
+  const dataDirDisplay = DATA_ROOT;
+
   console.log(`tmux-web — terminal-in-the-browser for tmux
 
 Usage:
@@ -98,6 +102,6 @@ Usage:
 
 Files:
   ~/.config/tmux-web/settings.json   plugin list
-  ~/.tmux-web/                       plugin installs + runtime state
+  ${dataDirDisplay}/                       plugin installs + runtime state
 `);
 }

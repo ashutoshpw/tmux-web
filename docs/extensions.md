@@ -17,7 +17,7 @@ tmux-web add @tmux-web/ext-github-actions
 
 This does two things:
 
-1. Installs the package into `~/.tmux-web/node_modules/`
+1. Installs the package into `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` when running in dev mode)
 2. Appends it to `~/.config/tmux-web/settings.json`'s `plugins` array
 
 You can then run `tmux-web` (or `npx tmux-web` / `bunx tmux-web`) from anywhere and the plugin loads automatically.
@@ -36,9 +36,9 @@ tmux-web remove @tmux-web/ext-github-actions
 | Path | Contents |
 | --- | --- |
 | `~/.config/tmux-web/settings.json` | Declarative list of enabled plugins |
-| `~/.tmux-web/node_modules/` | Installed plugin packages |
-| `~/.tmux-web/extensions/<id>/` | Per-extension state directory (passed to the extension as `EXT_DATA_DIR`) |
-| `~/.tmux-web/db.json` | tmux-web's own notes + scheduler state |
+| `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` in dev mode) | Installed plugin packages |
+| `~/.tmux-web/extensions/<id>/` (or `~/.dev/.tmux-web/extensions/<id>/` in dev mode) | Per-extension state directory (passed to the extension as `EXT_DATA_DIR`) |
+| `~/.tmux-web/db.json` (or `~/.dev/.tmux-web/db.json` in dev mode) | tmux-web's own notes + scheduler state |
 
 ### Secrets and env vars
 
@@ -173,7 +173,7 @@ The host injects two env vars when spawning the child:
 | Env var | Purpose |
 | --- | --- |
 | `EXT_SOCKET` | Absolute path of the Unix socket the backend must `listen()` on |
-| `EXT_DATA_DIR` | Pre-created data directory (`~/.tmux-web/extensions/<id>/`) for persistent state |
+| `EXT_DATA_DIR` | Pre-created data directory (`~/.tmux-web/extensions/<id>/`) for persistent state (`~/.dev/.tmux-web/extensions/<id>/` in dev mode) |
 
 Use `EXT_DATA_DIR` for any file-backed storage so user data lives outside the package install:
 

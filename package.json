@@ -16,7 +16,7 @@
     "build:exts": "node scripts/build-exts.mjs --force",
     "start": "node dist/index.js",
     "predev": "node scripts/build-exts.mjs",
-    "dev": "npx tsx src/index.ts"
+    "dev": "TMUX_WEB_DEV=1 npx tsx src/index.ts"
   },
   "keywords": [
     "tmux",

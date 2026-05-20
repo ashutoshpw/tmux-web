@@ -5,6 +5,7 @@ import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
 import type { Hono } from 'hono';
+import { getDataRoot, getExtensionDataDir, getPluginDir } from './state-paths.js';
 
 export interface ExtManifest {
   id:          string;
@@ -65,10 +66,10 @@ async function tryLoadManifest(extDir: string): Promise<ExtManifest | null> {
 }
 
 function resolvePluginDir(pkgName: string): string | null {
-  // Canonical: ~/.tmux-web/node_modules/ — managed by `tmux-web add`.
+  // Canonical: <data root>/node_modules/ — managed by `tmux-web add`.
   // Fallback: <cwd>/node_modules/ — for project-local development.
   const searchPaths = [
-    path.join(os.homedir(), '.tmux-web', 'node_modules'),
+    getPluginDir(),
     path.join(process.cwd(), 'node_modules'),
   ];
   for (const base of searchPaths) {
@@ -115,14 +116,15 @@ export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
 
 export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): ChildProcess {
   const sockPath = path.join(os.tmpdir(), `tmux-web-ext-${manifest.id}.sock`);
-  const dataDir  = path.join(os.homedir(), '.tmux-web', 'extensions', manifest.id);
+  const dataDir  = getExtensionDataDir(manifest.id);
+  const dataRoot = getDataRoot();
   mkdirSync(dataDir, { recursive: true });
   manifest._socket = sockPath;
 
   const [cmd, ...args] = (manifest.start as string).split(' ');
   const child = spawn(cmd, args, {
     cwd: extDir,
-    env: { ...process.env, EXT_SOCKET: sockPath, EXT_DATA_DIR: dataDir },
+    env: { ...process.env, TMUX_WEB_DATA_ROOT: dataRoot, EXT_SOCKET: sockPath, EXT_DATA_DIR: dataDir },
     stdio: 'pipe',
   });
 

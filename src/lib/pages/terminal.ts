@@ -2,6 +2,14 @@ import { cssVarsStyle } from '../theme.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import { schedulerDrawerCSS, schedulerDrawerHTML, schedulerDrawerScript } from '../scheduler-drawer.js';
 import type { ExtManifest } from '../ext-loader.js';
+import {
+	commandbarButtonHTML,
+	commandbarCSS,
+	commandbarHTML,
+	commandbarScript,
+	type CommandbarSession,
+} from '../commandbar.js';
+import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from '../drawer-resize.js';
 
 function extDrawerCSS(): string {
 	return `
@@ -17,6 +25,7 @@ function extDrawerCSS(): string {
     transform: translateX(100%); transition: transform 0.25s ease;
   }
   .ext-drawer.open { transform: translateX(0); }
+  ${drawerResizeCSS()}
   .ext-drawer .drawer-header {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px; border-bottom: 1px solid var(--panel-border);
@@ -41,7 +50,8 @@ function extDrawerHTML(manifest: ExtManifest): string {
 	const id = manifest.id;
 	return `
 <div id="ext-${id}-backdrop" class="ext-backdrop"></div>
-<div id="ext-${id}-drawer" class="ext-drawer">
+<div id="ext-${id}-drawer" class="ext-drawer resizable-drawer">
+  ${drawerResizeHandleHTML()}
   <div class="drawer-header">
     <span>${manifest.icon} ${manifest.name}</span>
     <button id="ext-${id}-close">&times;</button>
@@ -54,6 +64,7 @@ function extDrawerScript(manifest: ExtManifest, sessionName: string): string {
 	const id      = manifest.id;
 	const cfgJson = JSON.stringify(manifest.config);
 	return `
+${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)}
 (function() {
   const backdrop = document.getElementById('ext-${id}-backdrop');
   const drawer   = document.getElementById('ext-${id}-drawer');
@@ -102,8 +113,17 @@ function extDrawerScript(manifest: ExtManifest, sessionName: string): string {
 }());`;
 }
 
-export function renderTerminal(sessionName: string, extensions: ExtManifest[] = []): string {
+export function renderTerminal(
+	sessionName: string,
+	extensions: ExtManifest[] = [],
+	opts: { commandbarEnabled?: boolean; commandbarSessions?: CommandbarSession[] } = {},
+): string {
 	const sidebarExts = extensions.filter(e => e.slot === 'sidebar');
+	const { commandbarEnabled = false, commandbarSessions = [] } = opts;
+	const commandbarActions = [
+		{ label: 'Open notes', meta: `Notes for ${sessionName}`, clickTargetId: 'notes-toggle' },
+		{ label: 'Open scheduler', meta: `Schedule command in ${sessionName}`, clickTargetId: 'sched-toggle' },
+	];
 	return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -171,6 +191,7 @@ export function renderTerminal(sessionName: string, extensions: ExtManifest[] = 
   }
   header .notes-btn:hover { color: var(--panel-accent); }
   header .notes-btn svg { width: 15px; height: 15px; fill: currentColor; }
+  ${commandbarEnabled ? commandbarCSS() : ''}
   ${notesDrawerCSS()}
   ${schedulerDrawerCSS()}
   ${extDrawerCSS()}
@@ -180,6 +201,7 @@ export function renderTerminal(sessionName: string, extensions: ExtManifest[] = 
 <header>
   <h1><a href="/" aria-label="Go to home">tmux</a></h1>
   <span class="session">${sessionName}</span>
+  ${commandbarEnabled ? commandbarButtonHTML('Sessions') : ''}
   <button class="notes-btn" id="notes-toggle" title="Session notes">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/></svg>
   </button>
@@ -193,6 +215,7 @@ export function renderTerminal(sessionName: string, extensions: ExtManifest[] = 
   </div>
 </header>
 <div id="terminal-container"></div>
+${commandbarEnabled ? commandbarHTML() : ''}
 ${notesDrawerHTML(`Notes — ${sessionName}`)}
 ${schedulerDrawerHTML(`Scheduler — ${sessionName}`)}
 ${sidebarExts.map(e => extDrawerHTML(e)).join('\n')}
@@ -432,6 +455,9 @@ ${notesDrawerScript(`session:${sessionName}`)}
 
 // ========== SCHEDULER ==========
 ${schedulerDrawerScript(sessionName)}
+
+// ========== COMMANDBAR ==========
+${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions) : ''}
 
 // ========== NOTES ==========
 // (notes and scheduler scripts already included above — extensions below)

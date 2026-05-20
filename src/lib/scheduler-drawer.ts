@@ -1,3 +1,5 @@
+import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
+
 export function schedulerDrawerCSS(): string {
 	return `
   #sched-backdrop {
@@ -12,6 +14,7 @@ export function schedulerDrawerCSS(): string {
     transform: translateX(100%); transition: transform 0.25s ease;
   }
   #sched-drawer.open { transform: translateX(0); }
+  ${drawerResizeCSS()}
   header .sched-btn {
     display: flex; align-items: center; gap: 4px;
     background: none; border: none; color: var(--panel-muted); cursor: pointer;
@@ -104,7 +107,8 @@ export function schedulerDrawerCSS(): string {
 export function schedulerDrawerHTML(title: string): string {
 	return `
 <div id="sched-backdrop"></div>
-<div id="sched-drawer">
+<div id="sched-drawer" class="resizable-drawer">
+  ${drawerResizeHandleHTML()}
   <div class="drawer-header">
     <span>${title}</span>
     <button id="sched-close">&times;</button>
@@ -149,6 +153,7 @@ export function schedulerDrawerScript(session: string): string {
 	const sessionJs = JSON.stringify(session);
 	return `
 const SCHED_SESSION = ${sessionJs};
+${drawerResizeScript('sched-drawer', 'tmux-web:drawer-width:scheduler', 400)}
 
 let schedCountdownInterval = null;
 let schedTickCount = 0;

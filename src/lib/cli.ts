@@ -1,30 +1,13 @@
 import { execFileSync } from 'node:child_process';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { getDataRoot, getSettingsPath } from './state-paths.js';
+import { readSettings, writeSettings } from './settings.js';
 
 const DATA_ROOT   = getDataRoot();
 const PLUGIN_DIR  = DATA_ROOT;
-const CONFIG_PATH = getSettingsPath();
 const CONFIG_DISPLAY = getSettingsPath();
-
-interface Settings {
-  plugins?: string[];
-}
-
-async function readSettings(): Promise<Settings> {
-  try {
-    return JSON.parse(await readFile(CONFIG_PATH, 'utf-8')) as Settings;
-  } catch {
-    return {};
-  }
-}
-
-async function writeSettings(cfg: Settings): Promise<void> {
-  await mkdir(path.dirname(CONFIG_PATH), { recursive: true });
-  await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n');
-}
 
 async function ensureInstallDir(): Promise<void> {
   await mkdir(PLUGIN_DIR, { recursive: true });

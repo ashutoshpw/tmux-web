@@ -5,7 +5,8 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import type { Hono } from 'hono';
-import { getDataRoot, getExtensionDataDir, getPluginDir, getSettingsPath } from './state-paths.js';
+import { getDataRoot, getExtensionDataDir, getPluginDir } from './state-paths.js';
+import { readSettings } from './settings.js';
 
 export interface ExtManifest {
   id:          string;
@@ -20,20 +21,6 @@ export interface ExtManifest {
   dir:         string;
   /** Unix socket path assigned at runtime — not in JSON. */
   _socket?:    string;
-}
-
-interface TmuxWebConfig {
-  plugins?: string[];
-}
-
-const CONFIG_PATH = getSettingsPath();
-
-async function readConfig(): Promise<TmuxWebConfig> {
-  try {
-    return JSON.parse(await readFile(CONFIG_PATH, 'utf-8')) as TmuxWebConfig;
-  } catch {
-    return {};
-  }
 }
 
 async function deriveId(extDir: string): Promise<string> {
@@ -100,7 +87,7 @@ export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
   }
 
   // 2. Plugins listed in settings.json
-  const cfg = await readConfig();
+  const cfg = await readSettings();
   for (const pkgName of cfg.plugins ?? []) {
     const pkgDir = resolvePluginDir(pkgName);
     if (!pkgDir) {

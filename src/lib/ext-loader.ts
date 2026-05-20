@@ -2,6 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import type { Hono } from 'hono';
 import { getDataRoot, getExtensionDataDir, getPluginDir, getSettingsPath } from './state-paths.js';

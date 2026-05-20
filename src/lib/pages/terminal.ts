@@ -9,6 +9,7 @@ import {
 	commandbarScript,
 	type CommandbarSession,
 } from '../commandbar.js';
+import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from '../drawer-resize.js';
 
 function extDrawerCSS(): string {
 	return `
@@ -24,6 +25,7 @@ function extDrawerCSS(): string {
     transform: translateX(100%); transition: transform 0.25s ease;
   }
   .ext-drawer.open { transform: translateX(0); }
+  ${drawerResizeCSS()}
   .ext-drawer .drawer-header {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px; border-bottom: 1px solid var(--panel-border);
@@ -48,7 +50,8 @@ function extDrawerHTML(manifest: ExtManifest): string {
 	const id = manifest.id;
 	return `
 <div id="ext-${id}-backdrop" class="ext-backdrop"></div>
-<div id="ext-${id}-drawer" class="ext-drawer">
+<div id="ext-${id}-drawer" class="ext-drawer resizable-drawer">
+  ${drawerResizeHandleHTML()}
   <div class="drawer-header">
     <span>${manifest.icon} ${manifest.name}</span>
     <button id="ext-${id}-close">&times;</button>
@@ -61,6 +64,7 @@ function extDrawerScript(manifest: ExtManifest, sessionName: string): string {
 	const id      = manifest.id;
 	const cfgJson = JSON.stringify(manifest.config);
 	return `
+${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)}
 (function() {
   const backdrop = document.getElementById('ext-${id}-backdrop');
   const drawer   = document.getElementById('ext-${id}-drawer');

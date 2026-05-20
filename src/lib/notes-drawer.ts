@@ -1,5 +1,6 @@
 import { notesDbScript } from './notes-db.js';
 import { notesUtilsScript } from './notes-utils.js';
+import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
 
 export function notesDrawerCSS(): string {
 	return `
@@ -15,6 +16,7 @@ export function notesDrawerCSS(): string {
     transform: translateX(100%); transition: transform 0.25s ease;
   }
   #notes-drawer.open { transform: translateX(0); }
+  ${drawerResizeCSS()}
   .drawer-header {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px; border-bottom: 1px solid var(--panel-border);
@@ -64,7 +66,8 @@ export function notesDrawerCSS(): string {
 export function notesDrawerHTML(title: string): string {
 	return `
 <div id="notes-backdrop"></div>
-<div id="notes-drawer">
+<div id="notes-drawer" class="resizable-drawer">
+  ${drawerResizeHandleHTML()}
   <div class="drawer-header">
     <span>${title}</span>
     <button id="drawer-close">&times;</button>
@@ -89,6 +92,7 @@ export function notesDrawerScript(scope: string): string {
 const NOTES_SCOPE = ${scopeJs};
 ${notesDbScript()}
 ${notesUtilsScript()}
+${drawerResizeScript('notes-drawer', 'tmux-web:drawer-width:notes', 360)}
 
 const notesBackdrop = document.getElementById('notes-backdrop');
 const notesDrawer = document.getElementById('notes-drawer');

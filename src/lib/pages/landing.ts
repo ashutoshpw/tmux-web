@@ -1,5 +1,12 @@
 import { cssVarsStyle } from '../theme.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
+import {
+	commandbarButtonHTML,
+	commandbarCSS,
+	commandbarHTML,
+	commandbarScript,
+	type CommandbarSession,
+} from '../commandbar.js';
 
 type TmuxSession = { name: string; windows: number; attached: boolean };
 
@@ -57,10 +64,18 @@ function sessionMeta(s: TmuxSession, view: 'default' | 'recent', accessMap: Map<
 
 export function renderLanding(
 	sessions: TmuxSession[],
-	opts: { view: 'default' | 'recent'; accessMap: Map<string, number> },
+	opts: {
+		view: 'default' | 'recent';
+		accessMap: Map<string, number>;
+		commandbarEnabled?: boolean;
+		commandbarSessions?: CommandbarSession[];
+	},
 ): string {
-	const { view, accessMap } = opts;
+	const { view, accessMap, commandbarEnabled = false, commandbarSessions = [] } = opts;
 	const sorted = sortSessionsForView(sessions, view, accessMap);
+	const commandbarActions = [
+		{ label: 'Open notes', meta: 'Global notes', clickTargetId: 'notes-toggle' },
+	];
 
 	const rows = sorted
 		.map(
@@ -108,6 +123,7 @@ export function renderLanding(
     display: flex; justify-content: space-between; align-items: center;
     margin-bottom: 20px;
   }
+  .landing-actions { display: flex; align-items: center; gap: 8px; }
   .landing-header .notes-btn {
     display: flex; align-items: center; gap: 4px;
     background: none; border: none; color: var(--panel-muted); cursor: pointer;
@@ -135,6 +151,7 @@ export function renderLanding(
     border: 1px solid var(--panel-border); padding: 6px 14px; border-radius: 6px;
   }
   .notes-link:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  ${commandbarEnabled ? commandbarCSS() : ''}
   ${notesDrawerCSS()}
 </style>
 </head>
@@ -142,10 +159,13 @@ export function renderLanding(
 <div class="container">
   <div class="landing-header">
     <h1>tmux sessions</h1>
-    <button class="notes-btn" id="notes-toggle" title="Global notes">
-      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/></svg>
-      Notes
-    </button>
+    <div class="landing-actions">
+      ${commandbarEnabled ? commandbarButtonHTML('Search') : ''}
+      <button class="notes-btn" id="notes-toggle" title="Global notes">
+        <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/></svg>
+        Notes
+      </button>
+    </div>
   </div>
   <nav class="view-tabs">
     <a href="/" class="tab${defaultActive}">Default</a>
@@ -156,10 +176,12 @@ export function renderLanding(
   <a href="${refreshHref}" class="refresh">refresh</a>
   <a href="/notes" class="notes-link">View all notes</a>
 </div>
+${commandbarEnabled ? commandbarHTML() : ''}
 ${notesDrawerHTML('Notes — Global')}
 
 <script type="module">
 ${notesDrawerScript('__global__')}
+${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions) : ''}
 </script>
 </body>
 </html>`;

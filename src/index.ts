@@ -11,6 +11,8 @@ import { db, type StoredTask } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
 import { cmdAdd, cmdRemove, cmdList, printUsage } from "./lib/cli.js";
+import { readSettings } from "./lib/settings.js";
+import { buildCommandbarSessions } from "./lib/commandbar.js";
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
@@ -68,6 +70,8 @@ function fireTask(id: string, sessionName: string, windowIndex: number, text: st
 await db.read();
 db.data.sessionAccess ??= [];
 
+const settings = await readSettings();
+const commandbarEnabled = settings.commandbar === true;
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
@@ -103,13 +107,17 @@ app.get("/", (c) => {
 	const view = c.req.query("view") === "recent" ? "recent" : "default";
 	const sessions = listSessions();
 	const accessMap = getSessionAccessMap();
-	return c.html(renderLanding(sessions, { view, accessMap }));
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
+	return c.html(renderLanding(sessions, { view, accessMap, commandbarEnabled, commandbarSessions }));
 });
 
 app.get("/s/:session", async (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	await recordSessionAccess(session);
-	return c.html(renderTerminal(session, extensions));
+	const sessions = listSessions();
+	const accessMap = getSessionAccessMap();
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
+	return c.html(renderTerminal(session, extensions, { commandbarEnabled, commandbarSessions }));
 });
 
 app.get("/notes", (c) => {
@@ -119,6 +127,11 @@ app.get("/notes", (c) => {
 app.get("/notes/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	return c.html(renderNotesPage(session));
+});
+
+app.get("/api/sessions", (c) => {
+	if (!commandbarEnabled) return c.json({ error: "commandbar disabled" }, 404);
+	return c.json(buildCommandbarSessions(listSessions(), getSessionAccessMap()));
 });
 
 // ── Notes API ──────────────────────────────────────────────────────────────

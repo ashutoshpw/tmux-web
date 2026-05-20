@@ -3,9 +3,8 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import http from 'node:http';
 import path from 'node:path';
-import os from 'node:os';
 import type { Hono } from 'hono';
-import { getDataRoot, getExtensionDataDir, getPluginDir } from './state-paths.js';
+import { getDataRoot, getExtensionDataDir, getPluginDir, getSettingsPath } from './state-paths.js';
 
 export interface ExtManifest {
   id:          string;
@@ -26,7 +25,7 @@ interface TmuxWebConfig {
   plugins?: string[];
 }
 
-const CONFIG_PATH = path.join(os.homedir(), '.config', 'tmux-web', 'settings.json');
+const CONFIG_PATH = getSettingsPath();
 
 async function readConfig(): Promise<TmuxWebConfig> {
   try {
@@ -99,7 +98,7 @@ export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
     }
   }
 
-  // 2. Plugins listed in ~/.config/tmux-web/settings.json
+  // 2. Plugins listed in settings.json
   const cfg = await readConfig();
   for (const pkgName of cfg.plugins ?? []) {
     const pkgDir = resolvePluginDir(pkgName);

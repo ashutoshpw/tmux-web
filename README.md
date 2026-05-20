@@ -48,7 +48,7 @@ tmux-web list                                 # show enabled plugins
 tmux-web remove @tmux-web/ext-github-actions  # uninstall + disable
 ```
 
-Enabled plugins live in `~/.config/tmux-web/settings.json`; installed packages live in `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` in dev mode). Build your own with a `tmux-extension.json` manifest, a Hono backend on a Unix socket, and an iframe UI — full guide in [`docs/extensions.md`](docs/extensions.md).
+Enabled plugins live in `~/.config/tmux-web/settings.json` (or `~/.dev/.config/tmux-web/settings.json` in dev mode); installed packages live in `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` in dev mode). Build your own with a `tmux-extension.json` manifest, a Hono backend on a Unix socket, and an iframe UI — full guide in [`docs/extensions.md`](docs/extensions.md).
 
 **Example:** Add the GitHub Actions extension and the sidebar shows live run status for the repo you're working in — flip to a red dot the moment a deploy starts failing, without leaving the terminal.
 
@@ -56,7 +56,7 @@ Enabled plugins live in `~/.config/tmux-web/settings.json`; installed packages l
 
 - **Node.js** >= 18
 - **tmux** installed and available in your PATH
-- Writable `~/.tmux-web/` (or `~/.dev/.tmux-web/` in dev mode) and `~/.config/tmux-web/` for plugin installs, notes, and scheduled tasks
+- Writable `~/.tmux-web/` (or `~/.dev/.tmux-web/` in dev mode), and `~/.config/tmux-web/` (or `~/.dev/.config/tmux-web/` in dev mode) for plugin installs, notes, and scheduled tasks
 
 ## How it works
 

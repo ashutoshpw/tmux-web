@@ -2,12 +2,12 @@ import { execFileSync } from 'node:child_process';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
-import { getDataRoot } from './state-paths.js';
+import { getDataRoot, getSettingsPath } from './state-paths.js';
 
 const DATA_ROOT   = getDataRoot();
 const PLUGIN_DIR  = DATA_ROOT;
-const CONFIG_PATH = path.join(os.homedir(), '.config', 'tmux-web', 'settings.json');
+const CONFIG_PATH = getSettingsPath();
+const CONFIG_DISPLAY = getSettingsPath();
 
 interface Settings {
   plugins?: string[];
@@ -101,7 +101,7 @@ Usage:
   tmux-web list                  Show enabled plugins
 
 Files:
-  ~/.config/tmux-web/settings.json   plugin list
-  ${dataDirDisplay}/                       plugin installs + runtime state
+  ${CONFIG_DISPLAY}   plugin list
+  ${dataDirDisplay}/                                                                         plugin installs + runtime state
 `);
 }

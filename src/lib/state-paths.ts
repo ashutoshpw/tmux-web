@@ -20,6 +20,16 @@ export function getDataRoot(): string {
     : path.join(homedir(), '.tmux-web');
 }
 
+export function getConfigRoot(): string {
+  return isDevelopmentMode()
+    ? path.join(homedir(), '.dev', '.config')
+    : path.join(homedir(), '.config');
+}
+
+export function getSettingsPath(): string {
+  return path.join(getConfigRoot(), 'tmux-web', 'settings.json');
+}
+
 export function getPluginDir(): string {
   return path.join(getDataRoot(), 'node_modules');
 }

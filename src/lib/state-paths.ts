@@ -37,3 +37,7 @@ export function getPluginDir(): string {
 export function getExtensionDataDir(extId: string): string {
   return path.join(getDataRoot(), 'extensions', extId);
 }
+
+export function getUploadsRoot(): string {
+  return path.join(getDataRoot(), 'uploads');
+}

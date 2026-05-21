@@ -39,6 +39,7 @@ import {
 	isAlternateScreen,
 } from "./lib/tmux-capture.js";
 import { readTerminalBufferConfig } from "./lib/terminal-config.js";
+import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
 
 loadDotEnv();
 
@@ -222,6 +223,39 @@ app.put("/api/notes/:scope", async (c) => {
 });
 
 // ── Scheduler API ──────────────────────────────────────────────────────────
+
+app.post("/api/session/:session/upload", async (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	const sessions = listSessions();
+	if (!sessions.some((s) => s.name === session)) {
+		return c.json({ error: "session not found" }, 404);
+	}
+
+	let body: Record<string, unknown>;
+	try {
+		body = await c.req.parseBody();
+	} catch {
+		return c.json({ error: "invalid multipart body" }, 400);
+	}
+
+	const file = body.file;
+	if (!(file instanceof File)) {
+		return c.json({ error: "missing file field" }, 400);
+	}
+
+	try {
+		const arrayBuffer = await file.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined);
+		return c.json({ path: filePath });
+	} catch (err) {
+		if (err instanceof ImageUploadError) {
+			return c.json({ error: err.message }, err.status);
+		}
+		console.error("[upload]", err);
+		return c.json({ error: "upload failed" }, 500);
+	}
+});
 
 app.get("/api/session/:session/windows", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));

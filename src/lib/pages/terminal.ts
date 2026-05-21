@@ -196,6 +196,11 @@ export function renderTerminal(
   header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--panel-muted); transition: background 0.2s; }
   header .dot.connected { background: var(--panel-success); }
   #terminal-container { flex: 1; width: 100%; overflow: hidden; }
+  #terminal-container.terminal-drag-over {
+    outline: 2px dashed var(--panel-accent);
+    outline-offset: -2px;
+    background: rgba(125, 211, 252, 0.06);
+  }
   header .notes-btn {
     display: flex; align-items: center; gap: 4px;
     background: none; border: none; color: var(--panel-muted); cursor: pointer;
@@ -444,6 +449,8 @@ function setConnected(ok) {
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const wsUrl = proto + '//' + location.host + '/ws/${sessionName}';
+const SESSION_NAME = ${JSON.stringify(sessionName)};
+const UPLOAD_URL = '/api/session/' + encodeURIComponent(SESSION_NAME) + '/upload';
 let reconnectDelay = 1000;
 const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
 
@@ -538,6 +545,66 @@ function pasteToTerminal(text) {
   sendTerminalInput(payload);
 }
 
+function pastePathToTerminal(filePath) {
+  sendTerminalInput(filePath);
+}
+
+function isImageMime(type) {
+  return typeof type === 'string' && type.startsWith('image/');
+}
+
+function getImageFileFromDataTransfer(dt) {
+  if (!dt?.files?.length) return null;
+  for (let i = 0; i < dt.files.length; i++) {
+    if (isImageMime(dt.files[i].type)) return dt.files[i];
+  }
+  return null;
+}
+
+function getImageFileFromClipboardData(cd) {
+  if (!cd?.items) return null;
+  for (let i = 0; i < cd.items.length; i++) {
+    const item = cd.items[i];
+    if (item.kind === 'file' && isImageMime(item.type)) return item.getAsFile();
+  }
+  return null;
+}
+
+function setUploadStatus(msg) {
+  if (msg) statusText.textContent = msg;
+  else setConnected(ws?.readyState === WebSocket.OPEN);
+}
+
+async function uploadImageBlob(blob) {
+  const fd = new FormData();
+  fd.append('file', blob, 'upload');
+  const res = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
+  if (!res.ok) {
+    let err = 'upload failed';
+    try {
+      const j = await res.json();
+      if (j.error) err = j.error;
+    } catch {}
+    throw new Error(err);
+  }
+  const j = await res.json();
+  if (!j.path) throw new Error('no path in response');
+  return j.path;
+}
+
+async function ingestImageBlob(blob) {
+  try {
+    setUploadStatus('uploading…');
+    const filePath = await uploadImageBlob(blob);
+    pastePathToTerminal(filePath);
+    setUploadStatus(null);
+  } catch (e) {
+    console.warn('image upload:', e);
+    setUploadStatus('upload failed');
+    setTimeout(() => setUploadStatus(null), 2000);
+  }
+}
+
 term.onData((data) => sendTerminalInput(data));
 term.attachCustomWheelEventHandler(sendTerminalWheel);
 
@@ -545,17 +612,45 @@ term.attachCustomKeyEventHandler((event) => {
   if (event.type !== 'keydown') return false;
   if ((event.ctrlKey || event.metaKey) && event.code === 'KeyV') {
     event.preventDefault();
-    navigator.clipboard?.readText()
-      .then((text) => { if (text) pasteToTerminal(text); })
-      .catch(() => {});
+    (async () => {
+      try {
+        if (navigator.clipboard?.read) {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            for (const type of item.types) {
+              if (isImageMime(type)) {
+                const blob = await item.getType(type);
+                await ingestImageBlob(blob);
+                return;
+              }
+            }
+          }
+        }
+      } catch {}
+      try {
+        const text = await navigator.clipboard?.readText();
+        if (text) pasteToTerminal(text);
+      } catch {}
+    })();
     return true;
   }
   return false;
 });
 
 let lastPasteAt = 0;
-function handlePasteEvent(event) {
-  const text = event.clipboardData?.getData('text/plain');
+async function handlePasteEvent(event) {
+  const cd = event.clipboardData;
+  const imageFile = getImageFileFromClipboardData(cd);
+  if (imageFile) {
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    if (now - lastPasteAt < 50) return;
+    lastPasteAt = now;
+    await ingestImageBlob(imageFile);
+    return;
+  }
+  const text = cd?.getData('text/plain');
   if (!text) return;
   event.preventDefault();
   event.stopPropagation();
@@ -566,6 +661,34 @@ function handlePasteEvent(event) {
 }
 container.addEventListener('paste', handlePasteEvent);
 if (term.textarea) term.textarea.addEventListener('paste', handlePasteEvent);
+
+let terminalDragDepth = 0;
+container.addEventListener('dragenter', (event) => {
+  event.preventDefault();
+  terminalDragDepth++;
+  if (getImageFileFromDataTransfer(event.dataTransfer)) {
+    container.classList.add('terminal-drag-over');
+  }
+});
+container.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+});
+container.addEventListener('dragleave', (event) => {
+  event.preventDefault();
+  terminalDragDepth--;
+  if (terminalDragDepth <= 0) {
+    terminalDragDepth = 0;
+    container.classList.remove('terminal-drag-over');
+  }
+});
+container.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  terminalDragDepth = 0;
+  container.classList.remove('terminal-drag-over');
+  const file = getImageFileFromDataTransfer(event.dataTransfer);
+  if (file) await ingestImageBlob(file);
+});
 
 term.onScroll(() => {
   if (phase !== 'live' || historyLoading || !isAtScrollbackTop()) return;

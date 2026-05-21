@@ -39,6 +39,22 @@ If the pane is on the **alternate screen** (vim, less, etc.), no snapshot is sen
 | `TMUX_WEB_SYNC_MAX_MS` | `3000` | Maximum sync duration before live forwarding |
 
 WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`.
+
+### Image paste (Claude Code, OpenCode, etc.)
+
+CLI tools that accept pasted images expect a **file on the host**, not inline terminal graphics. tmux-web bridges the browser clipboard or drag-and-drop:
+
+1. **Upload** — `POST /api/session/:session/upload` saves the image under `{dataRoot}/uploads/YYYY-MM-DD/{uuid}.{ext}` (PNG, JPEG, WebP, or GIF; UUID filename only).
+2. **Inject path** — The absolute path is sent into the pane via WebSocket `input`, as if typed, so the app can attach it (e.g. `[Image #1]` in Claude Code).
+
+Paste (Cmd/Ctrl+V) prefers clipboard images over plain text when both are present. Drag an image onto the terminal canvas to upload the same way.
+
+| Environment variable | Default | Purpose |
+|---------------------|---------|---------|
+| `TMUX_WEB_MAX_IMAGE_UPLOAD_BYTES` | `10485760` (10 MiB) | Maximum upload size per image |
+
+If tmux-web is exposed beyond localhost, treat uploads as sensitive (paths are readable by processes on the host). No automatic cleanup of `uploads/` in v1.
+
 - **Notes** — Per-session and global Markdown scratchpads persist to `~/.tmux-web/db.json` via lowdb (or `~/.dev/.tmux-web/db.json` in dev mode). See [Notes](notes.md).
 - **Scheduler** — Queues `tmux send-keys` calls to fire after a delay and re-arms surviving tasks on restart. See [Scheduler](scheduler.md).
 - **Extensions** — Sidebar plugins run as isolated child processes; the host reverse-proxies `/ext/<id>/api/*` to each extension over a Unix socket. See [Extensions](extensions.md) for install, config, and author guide.

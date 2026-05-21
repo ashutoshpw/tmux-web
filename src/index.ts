@@ -28,9 +28,12 @@ import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from
 import { db, type StoredTask } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
-import { cmdAdd, cmdRemove, cmdList, printUsage, printVersion } from "./lib/cli.js";
+import { loadDotEnv } from "./lib/load-env.js";
+import { cmdAdd, cmdRemove, cmdList, cmdSetup, printUsage, printVersion } from "./lib/cli.js";
 import { readSettings } from "./lib/settings.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
+
+loadDotEnv();
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
@@ -52,6 +55,9 @@ import { buildCommandbarSessions } from "./lib/commandbar.js";
 			case "list":
 			case "ls":
 				await cmdList();
+				process.exit(0);
+			case "setup":
+				await cmdSetup(args);
 				process.exit(0);
 			case "help":
 			case "--help":

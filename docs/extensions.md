@@ -9,7 +9,22 @@ tmux-web ships a small core. Anything beyond the terminal — GitHub Actions sta
 
 ## For users
 
-### Install and enable a plugin
+### Quick setup (recommended)
+
+```bash
+tmux-web setup
+```
+
+Walks through optional features: command bar, GitHub Actions extension, and an optional `GITHUB_PAT` saved to `~/.tmux-web/.env`.
+
+Non-interactive:
+
+```bash
+tmux-web setup --yes
+tmux-web setup --commandbar --github-actions
+```
+
+### Install and enable a plugin manually
 
 ```bash
 tmux-web add @tmux-web/ext-github-actions
@@ -39,10 +54,13 @@ tmux-web remove @tmux-web/ext-github-actions
 | `~/.tmux-web/node_modules/` (or `~/.dev/.tmux-web/node_modules/` in dev mode) | Installed plugin packages |
 | `~/.tmux-web/extensions/<id>/` (or `~/.dev/.tmux-web/extensions/<id>/` in dev mode) | Per-extension state directory (passed to the extension as `EXT_DATA_DIR`) |
 | `~/.tmux-web/db.json` (or `~/.dev/.tmux-web/db.json` in dev mode) | tmux-web's own notes + scheduler state |
+| `~/.tmux-web/.env` (or `~/.dev/.tmux-web/.env` in dev mode) | Secrets — loaded automatically on startup |
 
 ### Secrets and env vars
 
-Extensions inherit the env of the `tmux-web` process. Put any required tokens in a `.env` file and source it before running:
+Extensions inherit the env of the `tmux-web` process. **tmux-web loads `~/.tmux-web/.env` automatically** on every start (dev mode uses `~/.dev/.tmux-web/.env`). Variables already set in your shell are not overwritten.
+
+Create or update the file manually, or use `tmux-web setup` to save `GITHUB_PAT`:
 
 ```bash
 cat > ~/.tmux-web/.env <<'EOF'
@@ -51,11 +69,10 @@ PORT=9878
 EOF
 chmod 600 ~/.tmux-web/.env
 
-set -a; source ~/.tmux-web/.env; set +a
 tmux-web
 ```
 
-For a systemd service, use `EnvironmentFile=/home/youruser/.tmux-web/.env`.
+For a systemd service, use `EnvironmentFile=/home/youruser/.tmux-web/.env` (same path tmux-web reads by default).
 
 ---
 

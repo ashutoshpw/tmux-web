@@ -17,6 +17,9 @@ npx tmux-web
 ## Usage
 
 ```bash
+# Interactive setup (command bar, GitHub Actions extension, secrets)
+tmux-web setup
+
 # Start on default port 3000
 tmux-web
 
@@ -25,6 +28,8 @@ PORT=8080 tmux-web
 ```
 
 Then open `http://localhost:3000` in your browser. You'll see a list of active tmux sessions — click one to attach.
+
+Secrets in `~/.tmux-web/.env` (for example `GITHUB_PAT`) are loaded automatically when you run `tmux-web`. `tmux-web setup` can create that file for you.
 
 ## Documentation
 

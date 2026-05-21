@@ -1,5 +1,6 @@
 import { closeOtherDrawersExcept, wrapDrawerScript } from './drawer-script.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
+import { escapeHtml } from './html.js';
 
 export function schedulerDrawerCSS(): string {
 	return `
@@ -111,7 +112,7 @@ export function schedulerDrawerHTML(title: string): string {
 <div id="sched-drawer" class="resizable-drawer">
   ${drawerResizeHandleHTML()}
   <div class="drawer-header">
-    <span>${title}</span>
+    <span>${escapeHtml(title)}</span>
     <button id="sched-close">&times;</button>
   </div>
   <div class="sched-form-section">

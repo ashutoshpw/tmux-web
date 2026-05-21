@@ -1,6 +1,7 @@
 import { cssVarsStyle } from '../theme.js';
 import type { TmuxWebTheme } from '../themes/types.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
+import { escapeHtml } from '../html.js';
 import {
 	commandbarButtonHTML,
 	commandbarCSS,
@@ -82,8 +83,8 @@ export function renderLanding(
 	const rows = sorted
 		.map(
 			(s) =>
-				`<a href="/s/${encodeURIComponent(s.name)}" class="session-row">
-      <span class="name">${s.name}</span>
+					`<a href="/s/${encodeURIComponent(s.name)}" class="session-row">
+      <span class="name">${escapeHtml(s.name)}</span>
       <span class="meta">${sessionMeta(s, view, accessMap)}</span>
     </a>`,
 		)

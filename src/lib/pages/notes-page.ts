@@ -1,5 +1,6 @@
 import { cssVarsStyle } from '../theme.js';
 import type { TmuxWebTheme } from '../themes/types.js';
+import { escapeHtml } from '../html.js';
 import { notesDbScript } from '../notes-db.js';
 import { notesUtilsScript } from '../notes-utils.js';
 
@@ -10,13 +11,15 @@ export function renderNotesPage(session: string, theme: TmuxWebTheme): string {
 	const backHref = '/notes';
 	const exportName = isGlobal ? 'notes-global' : 'notes-session-' + session.replace(/[:\/\\]/g, '-');
 	const scopeJs = JSON.stringify(scope);
+	const exportNameJs = JSON.stringify(`${exportName}.md`);
+	const labelHtml = escapeHtml(label);
 
 	return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Notes — ${label} — tmux-web</title>
+<title>Notes - ${labelHtml} - tmux-web</title>
 <style>
   ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
@@ -65,7 +68,7 @@ export function renderNotesPage(session: string, theme: TmuxWebTheme): string {
 <div class="container">
   <div class="page-header">
     <div class="breadcrumb">
-      <a href="${backHref}">Notes</a> <span>/</span> <span>${label}</span>
+      <a href="${backHref}">Notes</a> <span>/</span> <span>${labelHtml}</span>
     </div>
   </div>
   <div class="toolbar">
@@ -147,7 +150,7 @@ exportBtn.addEventListener('click', () => {
   const blob = new Blob([notePlain], { type: 'text/markdown' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = '${exportName}.md';
+  a.download = ${exportNameJs};
   a.click();
   URL.revokeObjectURL(a.href);
 });

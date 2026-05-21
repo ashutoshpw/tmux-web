@@ -148,6 +148,13 @@ function socketProxy(
   });
 }
 
+export function resolveExtensionUiFile(uiDir: string, file: string): string | null {
+  const filePath = path.resolve(uiDir, file);
+  const uiRoot = path.resolve(uiDir);
+  if (!filePath.startsWith(uiRoot + path.sep)) return null;
+  return filePath;
+}
+
 export function registerExtensionRoutes(
   app: Hono,
   _extsDir: string,
@@ -161,9 +168,9 @@ export function registerExtensionRoutes(
     // ── Static UI files: GET /ext/:id/ui/* ─────────────────────────────────
     app.get(`/ext/${id}/ui/:file{.+}`, async (c) => {
       const file     = c.req.param('file');
-      const filePath = path.join(uiDir, file);
+      const filePath = resolveExtensionUiFile(uiDir, file);
 
-      if (!existsSync(filePath)) return c.notFound();
+      if (!filePath || !existsSync(filePath)) return c.notFound();
 
       const { readFile: rf } = await import('node:fs/promises');
       const content = await rf(filePath);

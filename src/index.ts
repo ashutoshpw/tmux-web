@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -27,9 +26,11 @@ try {
 } catch {}
 import { listSessions } from "./sessions.js";
 import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, renderSettings, renderThemeSettings, renderScheduleIndex } from "./frontend.js";
-import { db, type StoredTask } from "./lib/db.js";
+import { db } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
+import { SchedulerService, isValidScheduleInput } from "./lib/scheduler.js";
+import { handleClientMessage } from "./lib/ws-message.js";
 import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
 import { readSettings, writeSettings } from "./lib/settings.js";
@@ -137,26 +138,13 @@ function sendServerMessage(ws: WebSocket, msg: ServerMessage) {
 	}
 }
 
-interface ScheduledTask extends StoredTask {
-	timeoutHandle: ReturnType<typeof setTimeout>;
-}
-
 const activePtys = new Set<pty.IPty>();
-const scheduledTasks = new Map<string, ScheduledTask>();
 const extChildren: import("node:child_process").ChildProcess[] = [];
-
-function fireTask(id: string, sessionName: string, windowIndex: number, text: string) {
-	const target = `${sessionName}:${windowIndex}`;
-	try {
-		execFileSync("tmux", ["send-keys", "-t", target, "-l", text], { timeout: 5000 });
-		execFileSync("tmux", ["send-keys", "-t", target, "Enter"], { timeout: 5000 });
-	} catch (err: any) {
-		console.error(`[scheduler] send-keys to ${target} failed: ${err.message}`);
-	}
-	scheduledTasks.delete(id);
-	db.data.scheduledTasks = db.data.scheduledTasks.filter((t) => t.id !== id);
-	db.write().catch(console.error);
-}
+const scheduler = new SchedulerService({
+	db,
+	onMissedTask: (task) =>
+		console.warn(`[scheduler] dropped missed task ${task.id} (was due ${new Date(task.fireAt).toISOString()})`),
+});
 
 // Init db and re-schedule surviving tasks before starting server
 await db.read();
@@ -172,24 +160,7 @@ for (const ext of extensions) {
 	if (ext.start) extChildren.push(spawnExtensionBackend(ext.dir, ext));
 }
 
-const now = Date.now();
-const missed: string[] = [];
-for (const task of db.data.scheduledTasks) {
-	if (task.fireAt <= now) {
-		missed.push(task.id);
-		console.warn(`[scheduler] dropped missed task ${task.id} (was due ${new Date(task.fireAt).toISOString()})`);
-	} else {
-		const handle = setTimeout(
-			() => fireTask(task.id, task.sessionName, task.windowIndex, task.text),
-			task.fireAt - now,
-		);
-		scheduledTasks.set(task.id, { ...task, timeoutHandle: handle });
-	}
-}
-if (missed.length) {
-	db.data.scheduledTasks = db.data.scheduledTasks.filter((t) => !missed.includes(t.id));
-	await db.write();
-}
+await scheduler.restoreFromDb();
 
 const app = new Hono();
 
@@ -277,12 +248,7 @@ app.get("/notes/:session", (c) => {
 });
 
 app.get("/schedule", (c) => {
-	const tasks = [...scheduledTasks.values()]
-		.map(({ id, sessionName, windowIndex, text, fireAt, createdAt }) => ({
-			id, sessionName, windowIndex, text, fireAt, createdAt,
-			remainingMs: Math.max(0, fireAt - Date.now()),
-		}));
-	return c.html(renderScheduleIndex(tasks, activeTheme));
+	return c.html(renderScheduleIndex(scheduler.list(), activeTheme));
 });
 
 // ── Settings pages ───────────────────────────────────────────────────────────
@@ -459,52 +425,20 @@ app.post("/api/session/:session/select-window", async (c) => {
 });
 
 app.get("/api/schedule", (c) => {
-	const session = c.req.query("session");
-	const tasks = [...scheduledTasks.values()]
-		.filter((t) => !session || t.sessionName === session)
-		.map(({ id, sessionName, windowIndex, text, fireAt, createdAt }) => ({
-			id, sessionName, windowIndex, text, fireAt, createdAt,
-			remainingMs: Math.max(0, fireAt - Date.now()),
-		}))
-		.sort((a, b) => a.fireAt - b.fireAt);
-	return c.json(tasks);
+	return c.json(scheduler.list(c.req.query("session")));
 });
 
 app.post("/api/schedule", async (c) => {
-	let body: { sessionName?: unknown; windowIndex?: unknown; text?: unknown; delayMs?: unknown };
+	let body: unknown;
 	try { body = await c.req.json(); } catch { return c.json({ error: "invalid json" }, 400); }
-
-	const { sessionName, windowIndex, text, delayMs } = body;
-	if (
-		typeof sessionName !== "string" || !sessionName ||
-		typeof windowIndex !== "number" || !Number.isInteger(windowIndex) || windowIndex < 0 ||
-		typeof text !== "string" || !text || text.length > 4096 ||
-		typeof delayMs !== "number" || delayMs < 1 || delayMs > 86_400_000
-	) {
-		return c.json({ error: "invalid body" }, 400);
-	}
-
-	const { randomUUID } = await import("node:crypto");
-	const id = randomUUID();
-	const createdAt = Date.now();
-	const fireAt = createdAt + delayMs;
-
-	const timeoutHandle = setTimeout(() => fireTask(id, sessionName, windowIndex, text), delayMs);
-	scheduledTasks.set(id, { id, sessionName, windowIndex, text, fireAt, createdAt, timeoutHandle });
-	db.data.scheduledTasks.push({ id, sessionName, windowIndex, text, fireAt, createdAt });
-	await db.write();
-
-	return c.json({ id, fireAt });
+	if (!isValidScheduleInput(body)) return c.json({ error: "invalid body" }, 400);
+	const task = await scheduler.create(body);
+	return c.json({ id: task.id, fireAt: task.fireAt });
 });
 
-app.delete("/api/schedule/:id", (c) => {
-	const id = c.req.param("id");
-	const task = scheduledTasks.get(id);
-	if (!task) return c.json({ error: "not found" }, 404);
-	clearTimeout(task.timeoutHandle);
-	scheduledTasks.delete(id);
-	db.data.scheduledTasks = db.data.scheduledTasks.filter((t) => t.id !== id);
-	db.write().catch(console.error);
+app.delete("/api/schedule/:id", async (c) => {
+	const deleted = await scheduler.delete(c.req.param("id"));
+	if (!deleted) return c.json({ error: "not found" }, 404);
 	return c.json({ ok: true });
 });
 
@@ -621,6 +555,15 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 		if (!ptyProcess) return;
 		const data = typeof raw === "string" ? raw : raw.toString("utf-8");
 
+		// input/resize go through the shared helper (covered by ws-message tests).
+		// A resize arriving after the pty exits can throw on a closed fd — ignore it.
+		try {
+			if (handleClientMessage(data, ptyProcess)) return;
+		} catch {
+			return;
+		}
+
+		// Anything the helper didn't handle: load_history is the only other type.
 		let msg: ClientMessage;
 		try {
 			msg = JSON.parse(data);
@@ -628,19 +571,7 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 			return;
 		}
 
-		if (msg.type === "input" && typeof msg.data === "string") {
-			ptyProcess.write(msg.data);
-		} else if (
-			msg.type === "resize" &&
-			typeof msg.cols === "number" &&
-			typeof msg.rows === "number"
-		) {
-			try {
-				ptyProcess.resize(Math.max(10, msg.cols), Math.max(5, msg.rows));
-			} catch {
-				// PTY fd already closed — resize arrived after exit, ignore
-			}
-		} else if (msg.type === "load_history" && typeof msg.before === "number") {
+		if (msg.type === "load_history" && typeof msg.before === "number") {
 			const before = Math.max(0, Math.floor(msg.before));
 			try {
 				const { data: chunk, lines } = capturePaneHistoryChunk(
@@ -675,10 +606,7 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 });
 
 function cleanup() {
-	for (const task of scheduledTasks.values()) {
-		try { clearTimeout(task.timeoutHandle); } catch {}
-	}
-	scheduledTasks.clear();
+	scheduler.cleanup();
 	for (const p of activePtys) {
 		try { p.kill(); } catch {}
 	}

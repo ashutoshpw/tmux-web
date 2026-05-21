@@ -2,6 +2,7 @@ import { notesDbScript } from './notes-db.js';
 import { notesUtilsScript } from './notes-utils.js';
 import { closeOtherDrawersExcept, wrapDrawerScript } from './drawer-script.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
+import { escapeHtml } from './html.js';
 
 export function notesDrawerCSS(): string {
 	return `
@@ -70,7 +71,7 @@ export function notesDrawerHTML(title: string): string {
 <div id="notes-drawer" class="resizable-drawer">
   ${drawerResizeHandleHTML()}
   <div class="drawer-header">
-    <span>${title}</span>
+    <span>${escapeHtml(title)}</span>
     <button id="drawer-close">&times;</button>
   </div>
   <div class="drawer-toolbar">

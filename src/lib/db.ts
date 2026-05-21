@@ -24,7 +24,7 @@ export interface SessionAccessRecord {
 	lastAccessedAt: number; // ms timestamp
 }
 
-interface DbSchema {
+export interface DbSchema {
 	notes: NoteRecord[];
 	scheduledTasks: StoredTask[];
 	sessionAccess: SessionAccessRecord[];

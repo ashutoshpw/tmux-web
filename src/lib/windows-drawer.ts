@@ -1,5 +1,6 @@
 import { closeOtherDrawersExcept, wrapDrawerScript } from './drawer-script.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
+import { escapeHtml } from './html.js';
 
 export function windowsDrawerCSS(): string {
 	return `
@@ -70,7 +71,7 @@ export function windowsDrawerHTML(title: string): string {
 <div id="windows-drawer" class="resizable-drawer">
   ${drawerResizeHandleHTML()}
   <div class="drawer-header">
-    <span>${title}</span>
+    <span>${escapeHtml(title)}</span>
     <button id="windows-close">&times;</button>
   </div>
   <div id="windows-error"></div>

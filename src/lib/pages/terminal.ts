@@ -1,5 +1,6 @@
 import { cssVarsStyle } from '../theme.js';
 import type { TmuxWebTheme } from '../themes/types.js';
+import { escapeHtml, escapeAttr } from '../html.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import { schedulerDrawerCSS, schedulerDrawerHTML, schedulerDrawerScript } from '../scheduler-drawer.js';
 import { windowsDrawerCSS, windowsDrawerHTML, windowsDrawerScript } from '../windows-drawer.js';
@@ -56,7 +57,7 @@ function extDrawerHTML(manifest: ExtManifest): string {
 <div id="ext-${id}-drawer" class="ext-drawer resizable-drawer">
   ${drawerResizeHandleHTML()}
   <div class="drawer-header">
-    <span>${manifest.icon} ${manifest.name}</span>
+    <span>${escapeHtml(manifest.icon)} ${escapeHtml(manifest.name)}</span>
     <button id="ext-${id}-close">&times;</button>
   </div>
   <iframe id="ext-${id}-frame" src="/ext/${id}/ui/index.html"></iframe>
@@ -146,7 +147,7 @@ export function renderTerminal(
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>tmux: ${sessionName}</title>
+<title>tmux: ${escapeHtml(sessionName)}</title>
 <style>
   ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); height: 100%; width: 100%; overflow: hidden; }
@@ -228,7 +229,7 @@ export function renderTerminal(
 <body>
 <header>
   <h1><a href="/" aria-label="Go to home">tmux</a></h1>
-  <span class="session">${sessionName}</span>
+  <span class="session">${escapeHtml(sessionName)}</span>
   ${commandbarEnabled ? commandbarButtonHTML('Sessions') : ''}
   <button class="notes-btn" id="notes-toggle" title="Session notes">
     <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h5v7h7v9H6z"/></svg>
@@ -239,7 +240,7 @@ export function renderTerminal(
   <button class="windows-btn" id="windows-toggle" title="Switch window">
     <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h16v2H4v-2z"/></svg>
   </button>
-  ${sidebarExts.map(e => `<button class="ext-btn" id="ext-${e.id}-toggle" title="${e.name}">${e.icon}</button>`).join('\n  ')}
+  ${sidebarExts.map(e => `<button class="ext-btn" id="ext-${e.id}-toggle" title="${escapeAttr(e.name)}">${escapeHtml(e.icon)}</button>`).join('\n  ')}
   <div class="status">
     <div class="dot" id="status-dot"></div>
     <span id="status-text">connecting</span>

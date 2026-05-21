@@ -60,4 +60,5 @@ If tmux-web is exposed beyond localhost, treat uploads as sensitive (paths are r
 
 - **Notes** — Per-session and global Markdown scratchpads persist to `~/.tmux-web/db.json` via lowdb (or `~/.dev/.tmux-web/db.json` in dev mode). See [Notes](notes.md).
 - **Scheduler** — Queues `tmux send-keys` calls to fire after a delay and re-arms surviving tasks on restart. See [Scheduler](scheduler.md).
+- **Windows drawer** — On the terminal page, a header tab icon opens a drawer listing tmux windows in the current session. Tapping a row runs `tmux select-window` on the host so the attached PTY switches without mobile keybindings. List: `GET /api/session/:session/windows`; switch: `POST /api/session/:session/select-window` with body `{ windowIndex: number }`.
 - **Extensions** — Sidebar plugins run as isolated child processes; the host reverse-proxies `/ext/<id>/api/*` to each extension over a Unix socket. See [Extensions](extensions.md) for install, config, and author guide.

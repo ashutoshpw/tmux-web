@@ -2,6 +2,7 @@ import { cssVarsStyle } from '../theme.js';
 import type { TmuxWebTheme } from '../themes/types.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import { schedulerDrawerCSS, schedulerDrawerHTML, schedulerDrawerScript } from '../scheduler-drawer.js';
+import { windowsDrawerCSS, windowsDrawerHTML, windowsDrawerScript } from '../windows-drawer.js';
 import type { ExtManifest } from '../ext-loader.js';
 import {
 	commandbarButtonHTML,
@@ -138,6 +139,7 @@ export function renderTerminal(
 	const commandbarActions = [
 		{ label: 'Open notes', meta: `Notes for ${sessionName}`, clickTargetId: 'notes-toggle' },
 		{ label: 'Open scheduler', meta: `Schedule command in ${sessionName}`, clickTargetId: 'sched-toggle' },
+		{ label: 'Switch window', meta: `Windows in ${sessionName}`, clickTargetId: 'windows-toggle' },
 	];
 	return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -218,6 +220,7 @@ export function renderTerminal(
   ${commandbarEnabled ? commandbarCSS() : ''}
   ${notesDrawerCSS()}
   ${schedulerDrawerCSS()}
+  ${windowsDrawerCSS()}
   ${extDrawerCSS()}
 </style>
 </head>
@@ -232,6 +235,9 @@ export function renderTerminal(
   <button class="sched-btn" id="sched-toggle" title="Schedule command">
     <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z"/></svg>
   </button>
+  <button class="windows-btn" id="windows-toggle" title="Switch window">
+    <svg viewBox="0 0 24 24"><path d="M4 6h16v2H4V6zm0 5h10v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+  </button>
   ${sidebarExts.map(e => `<button class="ext-btn" id="ext-${e.id}-toggle" title="${e.name}">${e.icon}</button>`).join('\n  ')}
   <div class="status">
     <div class="dot" id="status-dot"></div>
@@ -242,6 +248,7 @@ export function renderTerminal(
 ${commandbarEnabled ? commandbarHTML() : ''}
 ${notesDrawerHTML(`Notes — ${sessionName}`)}
 ${schedulerDrawerHTML(`Scheduler — ${sessionName}`)}
+${windowsDrawerHTML(`Windows — ${sessionName}`)}
 ${sidebarExts.map(e => extDrawerHTML(e)).join('\n')}
 
 <script type="module">
@@ -259,6 +266,9 @@ ${notesDrawerScript(`session:${sessionName}`)}
 
 // ========== SCHEDULER ==========
 ${schedulerDrawerScript(sessionName)}
+
+// ========== WINDOWS ==========
+${windowsDrawerScript(sessionName)}
 
 // ========== COMMANDBAR ==========
 ${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions) : ''}

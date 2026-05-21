@@ -1,5 +1,6 @@
 import { notesDbScript } from './notes-db.js';
 import { notesUtilsScript } from './notes-utils.js';
+import { closeOtherDrawersExcept, wrapDrawerScript } from './drawer-script.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
 
 export function notesDrawerCSS(): string {
@@ -88,7 +89,7 @@ export function notesDrawerHTML(title: string): string {
 // making it safe against XSS from user-controlled note text.
 export function notesDrawerScript(scope: string): string {
 	const scopeJs = JSON.stringify(scope);
-	return `
+	return wrapDrawerScript('notes', `
 const NOTES_SCOPE = ${scopeJs};
 ${notesDbScript()}
 ${notesUtilsScript()}
@@ -119,6 +120,7 @@ async function renderNote() {
 }
 
 function openDrawer() {
+  ${closeOtherDrawersExcept('notes')}
   notesDrawer.classList.add('open');
   notesBackdrop.classList.add('open');
   renderNote();
@@ -208,5 +210,5 @@ window.addEventListener('popstate', () => {
 
 if (new URLSearchParams(location.search).get('tab') === 'notes') {
   openDrawer();
-}`;
+}`, 'closeDrawer');
 }

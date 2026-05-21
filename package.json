@@ -13,7 +13,8 @@
   "scripts": {
     "postinstall": "node scripts/fix-pty-perms.mjs",
     "prepublishOnly": "tsc && npm run build:client && npm run build:exts",
-    "build": "tsc && npm run build:client && npm run build:exts",
+    "build": "tsc && npm run check:drawer-scripts && npm run build:client && npm run build:exts",
+    "check:drawer-scripts": "tsx scripts/check-drawer-scripts.ts",
     "build:client": "bun scripts/build-client.mjs",
     "build:exts": "node scripts/build-exts.mjs --force",
     "start": "node dist/index.js",

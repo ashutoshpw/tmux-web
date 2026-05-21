@@ -43,6 +43,11 @@ import {
 } from "./lib/tmux-capture.js";
 import { readTerminalBufferConfig } from "./lib/terminal-config.js";
 import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
+import {
+	listSessionWindows,
+	selectSessionWindow,
+	TmuxWindowsError,
+} from "./lib/tmux-windows.js";
 
 loadDotEnv();
 
@@ -308,19 +313,36 @@ app.post("/api/session/:session/upload", async (c) => {
 
 app.get("/api/session/:session/windows", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
+	return c.json(listSessionWindows(session));
+});
+
+app.post("/api/session/:session/select-window", async (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	let body: { windowIndex?: unknown };
 	try {
-		const raw = execFileSync(
-			"tmux",
-			["list-windows", "-t", session, "-F", "#{window_index}\t#{window_name}\t#{window_active}"],
-			{ encoding: "utf-8", timeout: 3000 },
-		);
-		const windows = raw.trim().split("\n").filter(Boolean).map((line) => {
-			const [index, name, active] = line.split("\t");
-			return { index: parseInt(index, 10), name, active: active === "1" };
-		});
-		return c.json(windows);
+		body = await c.req.json();
 	} catch {
-		return c.json([], 200);
+		return c.json({ error: "invalid json" }, 400);
+	}
+
+	const { windowIndex } = body;
+	if (
+		typeof windowIndex !== "number" ||
+		!Number.isInteger(windowIndex) ||
+		windowIndex < 0
+	) {
+		return c.json({ error: "windowIndex must be a non-negative integer" }, 400);
+	}
+
+	try {
+		selectSessionWindow(session, windowIndex);
+		return c.json({ ok: true });
+	} catch (err) {
+		if (err instanceof TmuxWindowsError) {
+			return c.json({ error: err.message }, err.status);
+		}
+		console.error("[select-window]", err);
+		return c.json({ error: "select-window failed" }, 500);
 	}
 });
 

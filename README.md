@@ -50,6 +50,7 @@ The terminal renderer defaults to xterm.js. Start with `--ghostty` or set `TMUX_
 - [Documentation hub](docs/index.md)
 - [Notes](docs/notes.md) — per-session Markdown scratchpad
 - [Scheduler](docs/scheduler.md) — delayed `send-keys` tasks
+- **Windows drawer** — switch tmux windows from the terminal header (mobile-friendly tab picker)
 - [Extensions](docs/extensions.md) — install, configure, and build sidebar plugins
 - [Architecture](docs/architecture.md) — how the server, terminal, and extensions connect
 

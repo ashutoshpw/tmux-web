@@ -1,3 +1,4 @@
+import { closeOtherDrawersExcept, wrapDrawerScript } from './drawer-script.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from './drawer-resize.js';
 
 export function schedulerDrawerCSS(): string {
@@ -151,7 +152,7 @@ export function schedulerDrawerHTML(title: string): string {
 
 export function schedulerDrawerScript(session: string): string {
 	const sessionJs = JSON.stringify(session);
-	return `
+	return wrapDrawerScript('scheduler', `
 const SCHED_SESSION = ${sessionJs};
 ${drawerResizeScript('sched-drawer', 'tmux-web:drawer-width:scheduler', 400)}
 
@@ -197,7 +198,7 @@ function el(tag, cls, text) {
   return e;
 }
 
-async function fetchWindows() {
+async function fetchSchedWindows() {
   try {
     const res = await fetch('/api/session/' + encodeURIComponent(SCHED_SESSION) + '/windows');
     if (!res.ok) return;
@@ -324,12 +325,10 @@ function stopSchedTick() {
 }
 
 function openSchedDrawer() {
-  if (typeof closeDrawer === 'function' && document.getElementById('notes-drawer')?.classList.contains('open')) {
-    closeDrawer();
-  }
+  ${closeOtherDrawersExcept('scheduler')}
   document.getElementById('sched-drawer').classList.add('open');
   document.getElementById('sched-backdrop').classList.add('open');
-  fetchWindows();
+  fetchSchedWindows();
   fetchTasks();
   startSchedTick();
   const url = new URL(location.href);
@@ -373,5 +372,5 @@ window.addEventListener('popstate', () => {
   else closeSchedDrawer();
 });
 
-if (new URLSearchParams(location.search).get('tab') === 'scheduler') openSchedDrawer();`;
+if (new URLSearchParams(location.search).get('tab') === 'scheduler') openSchedDrawer();`, 'closeSchedDrawer');
 }

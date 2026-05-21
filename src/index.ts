@@ -32,8 +32,18 @@ import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, printUsage, printVersion } from "./lib/cli.js";
 import { readSettings } from "./lib/settings.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
+import {
+	getSessionPaneTarget,
+	capturePaneTail,
+	capturePaneHistoryChunk,
+	isAlternateScreen,
+} from "./lib/tmux-capture.js";
+import { readTerminalBufferConfig } from "./lib/terminal-config.js";
+import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
 
 loadDotEnv();
+
+const terminalBufferConfig = readTerminalBufferConfig();
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
@@ -79,7 +89,19 @@ loadDotEnv();
 
 type ClientMessage =
 	| { type: "input"; data: string }
-	| { type: "resize"; cols: number; rows: number };
+	| { type: "resize"; cols: number; rows: number }
+	| { type: "load_history"; before: number };
+
+type ServerMessage =
+	| { type: "snapshot"; data: string; lines: number }
+	| { type: "data"; data: string }
+	| { type: "history"; data: string; before: number; lines: number };
+
+function sendServerMessage(ws: WebSocket, msg: ServerMessage) {
+	if (ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify(msg));
+	}
+}
 
 interface ScheduledTask extends StoredTask {
 	timeoutHandle: ReturnType<typeof setTimeout>;
@@ -153,7 +175,11 @@ app.get("/s/:session", async (c) => {
 	const sessions = listSessions();
 	const accessMap = getSessionAccessMap();
 	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
-	return c.html(renderTerminal(session, extensions, { commandbarEnabled, commandbarSessions }));
+	return c.html(renderTerminal(session, extensions, {
+		commandbarEnabled,
+		commandbarSessions,
+		terminal: terminalBufferConfig,
+	}));
 });
 
 app.get("/notes", (c) => {
@@ -197,6 +223,39 @@ app.put("/api/notes/:scope", async (c) => {
 });
 
 // ── Scheduler API ──────────────────────────────────────────────────────────
+
+app.post("/api/session/:session/upload", async (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	const sessions = listSessions();
+	if (!sessions.some((s) => s.name === session)) {
+		return c.json({ error: "session not found" }, 404);
+	}
+
+	let body: Record<string, unknown>;
+	try {
+		body = await c.req.parseBody();
+	} catch {
+		return c.json({ error: "invalid multipart body" }, 400);
+	}
+
+	const file = body.file;
+	if (!(file instanceof File)) {
+		return c.json({ error: "missing file field" }, 400);
+	}
+
+	try {
+		const arrayBuffer = await file.arrayBuffer();
+		const buffer = Buffer.from(arrayBuffer);
+		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined);
+		return c.json({ path: filePath });
+	} catch (err) {
+		if (err instanceof ImageUploadError) {
+			return c.json({ error: err.message }, err.status);
+		}
+		console.error("[upload]", err);
+		return c.json({ error: "upload failed" }, 500);
+	}
+});
 
 app.get("/api/session/:session/windows", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
@@ -290,6 +349,50 @@ server.on("upgrade", (req, socket, head) => {
 
 wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessionName: string) => {
 	let ptyProcess: pty.IPty | null = null;
+	const { initialLines, historyChunk, syncIdleMs, syncMaxMs } = terminalBufferConfig;
+
+	let syncing = true;
+	let syncIdleTimer: ReturnType<typeof setTimeout> | null = null;
+	let syncMaxTimer: ReturnType<typeof setTimeout> | null = null;
+	let paneTarget = sessionName;
+
+	const clearSyncTimers = () => {
+		if (syncIdleTimer) {
+			clearTimeout(syncIdleTimer);
+			syncIdleTimer = null;
+		}
+		if (syncMaxTimer) {
+			clearTimeout(syncMaxTimer);
+			syncMaxTimer = null;
+		}
+	};
+
+	const finishSync = () => {
+		if (!syncing) return;
+		clearSyncTimers();
+		syncing = false;
+
+		try {
+			paneTarget = getSessionPaneTarget(sessionName);
+		} catch {
+			paneTarget = sessionName;
+		}
+
+		if (!isAlternateScreen(paneTarget)) {
+			try {
+				const data = capturePaneTail(paneTarget, initialLines);
+				sendServerMessage(ws, { type: "snapshot", data, lines: initialLines });
+			} catch {
+				// No snapshot — client waits for live PTY output
+			}
+		}
+	};
+
+	const scheduleSyncEnd = () => {
+		if (!syncing) return;
+		if (syncIdleTimer) clearTimeout(syncIdleTimer);
+		syncIdleTimer = setTimeout(finishSync, syncIdleMs);
+	};
 
 	try {
 		ptyProcess = pty.spawn("tmux", ["attach-session", "-t", sessionName], {
@@ -300,30 +403,35 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 			env: process.env as Record<string, string>,
 		});
 	} catch (err: any) {
-		ws.send(
-			`\r\n\x1b[31mFailed to attach to tmux session "${sessionName}": ${err.message}\x1b[0m\r\n`,
-		);
+		sendServerMessage(ws, {
+			type: "data",
+			data: `\r\n\x1b[31mFailed to attach to tmux session "${sessionName}": ${err.message}\x1b[0m\r\n`,
+		});
 		ws.close(1011, "pty spawn failed");
 		return;
 	}
 
 	activePtys.add(ptyProcess);
 
+	syncMaxTimer = setTimeout(finishSync, syncMaxMs);
+
 	ptyProcess.onData((data: string) => {
-		if (ws.readyState === WebSocket.OPEN) {
-			ws.send(data);
+		if (syncing) {
+			scheduleSyncEnd();
+			return;
 		}
+		sendServerMessage(ws, { type: "data", data });
 	});
 
 	ptyProcess.onExit(({ exitCode }) => {
+		clearSyncTimers();
 		if (ptyProcess) activePtys.delete(ptyProcess);
 		ptyProcess = null;
-		if (ws.readyState === WebSocket.OPEN) {
-			ws.send(
-				`\r\n\x1b[2m--- tmux exited (code ${exitCode}) ---\x1b[0m\r\n`,
-			);
-			ws.close(1000, "pty exited");
-		}
+		sendServerMessage(ws, {
+			type: "data",
+			data: `\r\n\x1b[2m--- tmux exited (code ${exitCode}) ---\x1b[0m\r\n`,
+		});
+		ws.close(1000, "pty exited");
 	});
 
 	ws.on("message", (raw) => {
@@ -349,10 +457,23 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 			} catch {
 				// PTY fd already closed — resize arrived after exit, ignore
 			}
+		} else if (msg.type === "load_history" && typeof msg.before === "number") {
+			const before = Math.max(0, Math.floor(msg.before));
+			try {
+				const { data: chunk, lines } = capturePaneHistoryChunk(
+					paneTarget,
+					before,
+					historyChunk,
+				);
+				sendServerMessage(ws, { type: "history", data: chunk, before, lines });
+			} catch {
+				sendServerMessage(ws, { type: "history", data: "", before, lines: 0 });
+			}
 		}
 	});
 
 	ws.on("close", () => {
+		clearSyncTimers();
 		if (ptyProcess) {
 			activePtys.delete(ptyProcess);
 			ptyProcess.kill();
@@ -361,6 +482,7 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 	});
 
 	ws.on("error", () => {
+		clearSyncTimers();
 		if (ptyProcess) {
 			activePtys.delete(ptyProcess);
 			ptyProcess.kill();

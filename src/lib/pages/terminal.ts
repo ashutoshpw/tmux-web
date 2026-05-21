@@ -10,6 +10,7 @@ import {
 	type CommandbarSession,
 } from '../commandbar.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from '../drawer-resize.js';
+import type { TerminalBufferConfig } from '../terminal-config.js';
 
 function extDrawerCSS(): string {
 	return `
@@ -116,10 +117,21 @@ ${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)
 export function renderTerminal(
 	sessionName: string,
 	extensions: ExtManifest[] = [],
-	opts: { commandbarEnabled?: boolean; commandbarSessions?: CommandbarSession[] } = {},
+	opts: {
+		commandbarEnabled?: boolean;
+		commandbarSessions?: CommandbarSession[];
+		terminal?: TerminalBufferConfig;
+	} = {},
 ): string {
 	const sidebarExts = extensions.filter(e => e.slot === 'sidebar');
 	const { commandbarEnabled = false, commandbarSessions = [] } = opts;
+	const terminalCfg = opts.terminal ?? {
+		initialLines: 1000,
+		historyChunk: 500,
+		syncIdleMs: 200,
+		syncMaxMs: 3000,
+	};
+	const scrollback = terminalCfg.initialLines + 2 * terminalCfg.historyChunk;
 	const commandbarActions = [
 		{ label: 'Open notes', meta: `Notes for ${sessionName}`, clickTargetId: 'notes-toggle' },
 		{ label: 'Open scheduler', meta: `Schedule command in ${sessionName}`, clickTargetId: 'sched-toggle' },
@@ -184,6 +196,11 @@ export function renderTerminal(
   header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--panel-muted); transition: background 0.2s; }
   header .dot.connected { background: var(--panel-success); }
   #terminal-container { flex: 1; width: 100%; overflow: hidden; }
+  #terminal-container.terminal-drag-over {
+    outline: 2px dashed var(--panel-accent);
+    outline-offset: -2px;
+    background: rgba(125, 211, 252, 0.06);
+  }
   header .notes-btn {
     display: flex; align-items: center; gap: 4px;
     background: none; border: none; color: var(--panel-muted); cursor: pointer;
@@ -225,12 +242,14 @@ import { init, Terminal } from 'https://esm.sh/ghostty-web@latest';
 
 await init();
 
+const TERMINAL_CFG = ${JSON.stringify(terminalCfg)};
+
 const term = new Terminal({
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
   cursorBlink: true,
   cursorStyle: 'bar',
-  scrollback: 50000,
+  scrollback: ${scrollback},
   convertEol: false,
   theme: {
     foreground: '#ffffff',
@@ -266,6 +285,88 @@ let fitRaf = 0;
 let fitTimer = 0;
 let touchGesture = null;
 let suppressTouchClickUntil = 0;
+
+let phase = 'connecting';
+let serverHistoryLoaded = 0;
+let historyLoading = false;
+let historyParts = [];
+let liveSuffix = '';
+
+function fullLoadedText() {
+  return historyParts.join('') + liveSuffix;
+}
+
+function isAtScrollbackTop() {
+  const buf = term.buffer?.active;
+  if (!buf) return false;
+  return buf.viewportY >= buf.baseY;
+}
+
+function rewriteTerminal(preserveScroll) {
+  const buf = term.buffer?.active;
+  const viewportY = preserveScroll && buf ? buf.viewportY : 0;
+  const baseY = preserveScroll && buf ? buf.baseY : 0;
+  const text = fullLoadedText();
+  term.reset();
+  if (!text) {
+    if (!preserveScroll) term.scrollToBottom?.();
+    return;
+  }
+  term.write(text, () => {
+    if (preserveScroll && typeof term.scrollToLine === 'function') {
+      term.scrollToLine(baseY + viewportY);
+    } else {
+      term.scrollToBottom?.();
+    }
+  });
+}
+
+function handleServerMessage(raw) {
+  let msg;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    if (phase === 'live') {
+      liveSuffix += raw;
+      term.write(raw);
+    }
+    return;
+  }
+
+  if (msg.type === 'snapshot' && typeof msg.data === 'string') {
+    historyParts = [msg.data];
+    liveSuffix = '';
+    serverHistoryLoaded = typeof msg.lines === 'number' ? msg.lines : TERMINAL_CFG.initialLines;
+    phase = 'live';
+    term.reset();
+    if (msg.data) term.write(msg.data);
+    term.scrollToBottom?.();
+    return;
+  }
+
+  if (msg.type === 'history' && typeof msg.data === 'string') {
+    historyLoading = false;
+    if (msg.lines > 0 && msg.data) {
+      historyParts.unshift(msg.data);
+      serverHistoryLoaded += msg.lines;
+      rewriteTerminal(true);
+    }
+    return;
+  }
+
+  if (msg.type === 'data' && typeof msg.data === 'string') {
+    if (phase === 'connecting') {
+      phase = 'live';
+      liveSuffix = msg.data;
+      term.write(msg.data);
+      return;
+    }
+    if (phase === 'live') {
+      liveSuffix += msg.data;
+      term.write(msg.data);
+    }
+  }
+}
 
 function updateCellMetrics(force = false) {
   const canvas = container.querySelector('canvas');
@@ -348,6 +449,8 @@ function setConnected(ok) {
 
 const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 const wsUrl = proto + '//' + location.host + '/ws/${sessionName}';
+const SESSION_NAME = ${JSON.stringify(sessionName)};
+const UPLOAD_URL = '/api/session/' + encodeURIComponent(SESSION_NAME) + '/upload';
 let reconnectDelay = 1000;
 const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
 
@@ -404,16 +507,22 @@ function sendTerminalWheel(event) {
 function connect() {
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
+    phase = 'connecting';
+    serverHistoryLoaded = 0;
+    historyLoading = false;
+    historyParts = [];
+    liveSuffix = '';
     try { term.reset(); } catch {}
     setConnected(true);
     reconnectDelay = 1000;
     sendJSON({ type: 'resize', cols, rows });
   };
   ws.onmessage = (event) => {
-    if (typeof event.data === 'string') term.write(event.data);
+    if (typeof event.data === 'string') handleServerMessage(event.data);
   };
   ws.onclose = () => {
     setConnected(false);
+    phase = 'connecting';
     setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 10000);
       connect();
@@ -422,8 +531,170 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
-term.onData((data) => sendJSON({ type: 'input', data }));
+function sendTerminalInput(data) {
+  sendJSON({ type: 'input', data });
+  if (phase === 'live') liveSuffix += data;
+}
+
+function pasteToTerminal(text) {
+  const normalized = text.split('\\r\\n').join('\\n').split('\\n').join('\\r');
+  const bracketed = term.getMode?.(2004) ?? false;
+  const payload = bracketed
+    ? '\\x1b[200~' + normalized + '\\x1b[201~'
+    : normalized;
+  sendTerminalInput(payload);
+}
+
+function pastePathToTerminal(filePath) {
+  sendTerminalInput(filePath);
+}
+
+function isImageMime(type) {
+  return typeof type === 'string' && type.startsWith('image/');
+}
+
+function getImageFileFromDataTransfer(dt) {
+  if (!dt?.files?.length) return null;
+  for (let i = 0; i < dt.files.length; i++) {
+    if (isImageMime(dt.files[i].type)) return dt.files[i];
+  }
+  return null;
+}
+
+function getImageFileFromClipboardData(cd) {
+  if (!cd?.items) return null;
+  for (let i = 0; i < cd.items.length; i++) {
+    const item = cd.items[i];
+    if (item.kind === 'file' && isImageMime(item.type)) return item.getAsFile();
+  }
+  return null;
+}
+
+function setUploadStatus(msg) {
+  if (msg) statusText.textContent = msg;
+  else setConnected(ws?.readyState === WebSocket.OPEN);
+}
+
+async function uploadImageBlob(blob) {
+  const fd = new FormData();
+  fd.append('file', blob, 'upload');
+  const res = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
+  if (!res.ok) {
+    let err = 'upload failed';
+    try {
+      const j = await res.json();
+      if (j.error) err = j.error;
+    } catch {}
+    throw new Error(err);
+  }
+  const j = await res.json();
+  if (!j.path) throw new Error('no path in response');
+  return j.path;
+}
+
+async function ingestImageBlob(blob) {
+  try {
+    setUploadStatus('uploading…');
+    const filePath = await uploadImageBlob(blob);
+    pastePathToTerminal(filePath);
+    setUploadStatus(null);
+  } catch (e) {
+    console.warn('image upload:', e);
+    setUploadStatus('upload failed');
+    setTimeout(() => setUploadStatus(null), 2000);
+  }
+}
+
+term.onData((data) => sendTerminalInput(data));
 term.attachCustomWheelEventHandler(sendTerminalWheel);
+
+term.attachCustomKeyEventHandler((event) => {
+  if (event.type !== 'keydown') return false;
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyV') {
+    event.preventDefault();
+    (async () => {
+      try {
+        if (navigator.clipboard?.read) {
+          const items = await navigator.clipboard.read();
+          for (const item of items) {
+            for (const type of item.types) {
+              if (isImageMime(type)) {
+                const blob = await item.getType(type);
+                await ingestImageBlob(blob);
+                return;
+              }
+            }
+          }
+        }
+      } catch {}
+      try {
+        const text = await navigator.clipboard?.readText();
+        if (text) pasteToTerminal(text);
+      } catch {}
+    })();
+    return true;
+  }
+  return false;
+});
+
+let lastPasteAt = 0;
+async function handlePasteEvent(event) {
+  const cd = event.clipboardData;
+  const imageFile = getImageFileFromClipboardData(cd);
+  if (imageFile) {
+    event.preventDefault();
+    event.stopPropagation();
+    const now = Date.now();
+    if (now - lastPasteAt < 50) return;
+    lastPasteAt = now;
+    await ingestImageBlob(imageFile);
+    return;
+  }
+  const text = cd?.getData('text/plain');
+  if (!text) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const now = Date.now();
+  if (now - lastPasteAt < 50) return;
+  lastPasteAt = now;
+  pasteToTerminal(text);
+}
+container.addEventListener('paste', handlePasteEvent);
+if (term.textarea) term.textarea.addEventListener('paste', handlePasteEvent);
+
+let terminalDragDepth = 0;
+container.addEventListener('dragenter', (event) => {
+  event.preventDefault();
+  terminalDragDepth++;
+  if (getImageFileFromDataTransfer(event.dataTransfer)) {
+    container.classList.add('terminal-drag-over');
+  }
+});
+container.addEventListener('dragover', (event) => {
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+});
+container.addEventListener('dragleave', (event) => {
+  event.preventDefault();
+  terminalDragDepth--;
+  if (terminalDragDepth <= 0) {
+    terminalDragDepth = 0;
+    container.classList.remove('terminal-drag-over');
+  }
+});
+container.addEventListener('drop', async (event) => {
+  event.preventDefault();
+  terminalDragDepth = 0;
+  container.classList.remove('terminal-drag-over');
+  const file = getImageFileFromDataTransfer(event.dataTransfer);
+  if (file) await ingestImageBlob(file);
+});
+
+term.onScroll(() => {
+  if (phase !== 'live' || historyLoading || !isAtScrollbackTop()) return;
+  historyLoading = true;
+  sendJSON({ type: 'load_history', before: serverHistoryLoaded });
+});
 
 document.addEventListener('keydown', (event) => {
   if (!isSafari || event.key !== 'Escape') return;

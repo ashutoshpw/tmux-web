@@ -25,6 +25,9 @@ tmux-web
 
 # Custom port
 PORT=8080 tmux-web
+
+# Optional: tail-first buffer loading (see docs/architecture.md)
+TMUX_WEB_INITIAL_LINES=1000 TMUX_WEB_HISTORY_CHUNK=500 tmux-web
 ```
 
 Then open `http://localhost:3000` in your browser. You'll see a list of active tmux sessions — click one to attach.

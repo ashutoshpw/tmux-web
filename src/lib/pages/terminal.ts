@@ -10,6 +10,7 @@ import {
 	type CommandbarSession,
 } from '../commandbar.js';
 import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from '../drawer-resize.js';
+import type { TerminalBufferConfig } from '../terminal-config.js';
 
 function extDrawerCSS(): string {
 	return `
@@ -116,10 +117,21 @@ ${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)
 export function renderTerminal(
 	sessionName: string,
 	extensions: ExtManifest[] = [],
-	opts: { commandbarEnabled?: boolean; commandbarSessions?: CommandbarSession[] } = {},
+	opts: {
+		commandbarEnabled?: boolean;
+		commandbarSessions?: CommandbarSession[];
+		terminal?: TerminalBufferConfig;
+	} = {},
 ): string {
 	const sidebarExts = extensions.filter(e => e.slot === 'sidebar');
 	const { commandbarEnabled = false, commandbarSessions = [] } = opts;
+	const terminalCfg = opts.terminal ?? {
+		initialLines: 1000,
+		historyChunk: 500,
+		syncIdleMs: 200,
+		syncMaxMs: 3000,
+	};
+	const scrollback = terminalCfg.initialLines + 2 * terminalCfg.historyChunk;
 	const commandbarActions = [
 		{ label: 'Open notes', meta: `Notes for ${sessionName}`, clickTargetId: 'notes-toggle' },
 		{ label: 'Open scheduler', meta: `Schedule command in ${sessionName}`, clickTargetId: 'sched-toggle' },
@@ -225,12 +237,14 @@ import { init, Terminal } from 'https://esm.sh/ghostty-web@latest';
 
 await init();
 
+const TERMINAL_CFG = ${JSON.stringify(terminalCfg)};
+
 const term = new Terminal({
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
   cursorBlink: true,
   cursorStyle: 'bar',
-  scrollback: 50000,
+  scrollback: ${scrollback},
   convertEol: false,
   theme: {
     foreground: '#ffffff',
@@ -266,6 +280,88 @@ let fitRaf = 0;
 let fitTimer = 0;
 let touchGesture = null;
 let suppressTouchClickUntil = 0;
+
+let phase = 'connecting';
+let serverHistoryLoaded = 0;
+let historyLoading = false;
+let historyParts = [];
+let liveSuffix = '';
+
+function fullLoadedText() {
+  return historyParts.join('') + liveSuffix;
+}
+
+function isAtScrollbackTop() {
+  const buf = term.buffer?.active;
+  if (!buf) return false;
+  return buf.viewportY >= buf.baseY;
+}
+
+function rewriteTerminal(preserveScroll) {
+  const buf = term.buffer?.active;
+  const viewportY = preserveScroll && buf ? buf.viewportY : 0;
+  const baseY = preserveScroll && buf ? buf.baseY : 0;
+  const text = fullLoadedText();
+  term.reset();
+  if (!text) {
+    if (!preserveScroll) term.scrollToBottom?.();
+    return;
+  }
+  term.write(text, () => {
+    if (preserveScroll && typeof term.scrollToLine === 'function') {
+      term.scrollToLine(baseY + viewportY);
+    } else {
+      term.scrollToBottom?.();
+    }
+  });
+}
+
+function handleServerMessage(raw) {
+  let msg;
+  try {
+    msg = JSON.parse(raw);
+  } catch {
+    if (phase === 'live') {
+      liveSuffix += raw;
+      term.write(raw);
+    }
+    return;
+  }
+
+  if (msg.type === 'snapshot' && typeof msg.data === 'string') {
+    historyParts = [msg.data];
+    liveSuffix = '';
+    serverHistoryLoaded = typeof msg.lines === 'number' ? msg.lines : TERMINAL_CFG.initialLines;
+    phase = 'live';
+    term.reset();
+    if (msg.data) term.write(msg.data);
+    term.scrollToBottom?.();
+    return;
+  }
+
+  if (msg.type === 'history' && typeof msg.data === 'string') {
+    historyLoading = false;
+    if (msg.lines > 0 && msg.data) {
+      historyParts.unshift(msg.data);
+      serverHistoryLoaded += msg.lines;
+      rewriteTerminal(true);
+    }
+    return;
+  }
+
+  if (msg.type === 'data' && typeof msg.data === 'string') {
+    if (phase === 'connecting') {
+      phase = 'live';
+      liveSuffix = msg.data;
+      term.write(msg.data);
+      return;
+    }
+    if (phase === 'live') {
+      liveSuffix += msg.data;
+      term.write(msg.data);
+    }
+  }
+}
 
 function updateCellMetrics(force = false) {
   const canvas = container.querySelector('canvas');
@@ -404,16 +500,22 @@ function sendTerminalWheel(event) {
 function connect() {
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
+    phase = 'connecting';
+    serverHistoryLoaded = 0;
+    historyLoading = false;
+    historyParts = [];
+    liveSuffix = '';
     try { term.reset(); } catch {}
     setConnected(true);
     reconnectDelay = 1000;
     sendJSON({ type: 'resize', cols, rows });
   };
   ws.onmessage = (event) => {
-    if (typeof event.data === 'string') term.write(event.data);
+    if (typeof event.data === 'string') handleServerMessage(event.data);
   };
   ws.onclose = () => {
     setConnected(false);
+    phase = 'connecting';
     setTimeout(() => {
       reconnectDelay = Math.min(reconnectDelay * 2, 10000);
       connect();
@@ -424,6 +526,12 @@ function connect() {
 
 term.onData((data) => sendJSON({ type: 'input', data }));
 term.attachCustomWheelEventHandler(sendTerminalWheel);
+
+term.onScroll(() => {
+  if (phase !== 'live' || historyLoading || !isAtScrollbackTop()) return;
+  historyLoading = true;
+  sendJSON({ type: 'load_history', before: serverHistoryLoaded });
+});
 
 document.addEventListener('keydown', (event) => {
   if (!isSafari || event.key !== 'Escape') return;

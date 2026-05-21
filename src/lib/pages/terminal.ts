@@ -524,8 +524,48 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 
-term.onData((data) => sendJSON({ type: 'input', data }));
+function sendTerminalInput(data) {
+  sendJSON({ type: 'input', data });
+  if (phase === 'live') liveSuffix += data;
+}
+
+function pasteToTerminal(text) {
+  const normalized = text.split('\\r\\n').join('\\n').split('\\n').join('\\r');
+  const bracketed = term.getMode?.(2004) ?? false;
+  const payload = bracketed
+    ? '\\x1b[200~' + normalized + '\\x1b[201~'
+    : normalized;
+  sendTerminalInput(payload);
+}
+
+term.onData((data) => sendTerminalInput(data));
 term.attachCustomWheelEventHandler(sendTerminalWheel);
+
+term.attachCustomKeyEventHandler((event) => {
+  if (event.type !== 'keydown') return false;
+  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyV') {
+    event.preventDefault();
+    navigator.clipboard?.readText()
+      .then((text) => { if (text) pasteToTerminal(text); })
+      .catch(() => {});
+    return true;
+  }
+  return false;
+});
+
+let lastPasteAt = 0;
+function handlePasteEvent(event) {
+  const text = event.clipboardData?.getData('text/plain');
+  if (!text) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const now = Date.now();
+  if (now - lastPasteAt < 50) return;
+  lastPasteAt = now;
+  pasteToTerminal(text);
+}
+container.addEventListener('paste', handlePasteEvent);
+if (term.textarea) term.textarea.addEventListener('paste', handlePasteEvent);
 
 term.onScroll(() => {
   if (phase !== 'live' || historyLoading || !isAtScrollbackTop()) return;

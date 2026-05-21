@@ -17,8 +17,8 @@ flowchart LR
 
 ## Components
 
-- **Landing page** — Lists all active tmux sessions; clicking one opens a full terminal view powered by a local xterm.js client bundle.
-- **Terminal** — The browser connects over WebSocket; the server spawns `tmux attach-session` via a PTY. Resize, input, and scrollback work; the client auto-reconnects if the connection drops.
+- **Landing page** — Lists all active tmux sessions; clicking one opens a full terminal view powered by a local xterm.js client bundle by default.
+- **Terminal** — The browser connects over WebSocket; the server spawns `tmux attach-session` via a PTY. Resize, input, and scrollback work; the client auto-reconnects if the connection drops. The terminal renderer defaults to `xterm`; start with `tmux-web --ghostty` or `TMUX_WEB_TERMINAL_RENDERER=ghostty tmux-web` to use ghostty-web instead. `--xterm` forces the default renderer.
 
 ### Terminal buffer loading
 
@@ -37,6 +37,7 @@ If the pane is on the **alternate screen** (vim, less, etc.), no snapshot is sen
 | `TMUX_WEB_HISTORY_CHUNK` | `500` | Lines fetched per scroll-up request |
 | `TMUX_WEB_SYNC_IDLE_MS` | `200` | Idle time after last PTY byte before sync ends |
 | `TMUX_WEB_SYNC_MAX_MS` | `3000` | Maximum sync duration before live forwarding |
+| `TMUX_WEB_TERMINAL_RENDERER` | `xterm` | Browser renderer: `xterm` or `ghostty` |
 
 WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`. The browser renderer is isolated in the terminal client bundle so the page shell, WebSocket protocol, and tmux capture flow can survive a future renderer swap.
 

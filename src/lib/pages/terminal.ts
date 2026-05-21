@@ -355,6 +355,52 @@ function sendJSON(obj) {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
 
+function getTerminalCell(clientX, clientY) {
+  const canvas = container.querySelector('canvas');
+  const rect = (canvas || container).getBoundingClientRect();
+  updateCellMetrics(true);
+  const x = Math.max(1, Math.min(cols, Math.floor((clientX - rect.left) / charW) + 1));
+  const y = Math.max(1, Math.min(rows, Math.floor((clientY - rect.top) / charH) + 1));
+  return { x, y };
+}
+
+function wheelEventCount(event) {
+  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+    ? 1
+    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+      ? rows
+      : 33;
+  return Math.max(1, Math.min(5, Math.round(Math.abs(event.deltaY / unit))));
+}
+
+function mouseModifierBits(event) {
+  return (event.shiftKey ? 4 : 0) + (event.altKey ? 8 : 0) + (event.ctrlKey ? 16 : 0);
+}
+
+function encodeSgrMouse(button, x, y) {
+  return '\\x1b[<' + button + ';' + x + ';' + y + 'M';
+}
+
+function encodeX10Mouse(button, x, y) {
+  if (x > 223 || y > 223) return '';
+  return '\\x1b[M'
+    + String.fromCharCode(32 + button)
+    + String.fromCharCode(32 + x)
+    + String.fromCharCode(32 + y);
+}
+
+function sendTerminalWheel(event) {
+  if (!term.hasMouseTracking?.() || event.deltaY === 0) return false;
+  const { x, y } = getTerminalCell(event.clientX, event.clientY);
+  const button = (event.deltaY < 0 ? 64 : 65) + mouseModifierBits(event);
+  const useSgr = term.getMode?.(1006) ?? true;
+  const sequence = useSgr ? encodeSgrMouse(button, x, y) : encodeX10Mouse(button, x, y);
+  if (!sequence) return false;
+  const count = wheelEventCount(event);
+  for (let i = 0; i < count; i++) sendJSON({ type: 'input', data: sequence });
+  return true;
+}
+
 function connect() {
   ws = new WebSocket(wsUrl);
   ws.onopen = () => {
@@ -377,6 +423,7 @@ function connect() {
 }
 
 term.onData((data) => sendJSON({ type: 'input', data }));
+term.attachCustomWheelEventHandler(sendTerminalWheel);
 
 document.addEventListener('keydown', (event) => {
   if (!isSafari || event.key !== 'Escape') return;

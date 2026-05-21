@@ -1,4 +1,5 @@
 import { cssVarsStyle } from '../theme.js';
+import type { TmuxWebTheme } from '../themes/types.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import {
 	commandbarButtonHTML,
@@ -69,9 +70,10 @@ export function renderLanding(
 		accessMap: Map<string, number>;
 		commandbarEnabled?: boolean;
 		commandbarSessions?: CommandbarSession[];
+		theme: TmuxWebTheme;
 	},
 ): string {
-	const { view, accessMap, commandbarEnabled = false, commandbarSessions = [] } = opts;
+	const { view, accessMap, commandbarEnabled = false, commandbarSessions = [], theme } = opts;
 	const sorted = sortSessionsForView(sessions, view, accessMap);
 	const commandbarActions = [
 		{ label: 'Open notes', meta: 'Global notes', clickTargetId: 'notes-toggle' },
@@ -102,7 +104,7 @@ export function renderLanding(
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>tmux-web</title>
 <style>
-  ${cssVarsStyle()}
+  ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
   .container { max-width: 520px; margin: 80px auto; padding: 0 20px; }
   h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--panel-accent); margin: 0; }

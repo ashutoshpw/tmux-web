@@ -1,8 +1,9 @@
 import { cssVarsStyle } from '../theme.js';
+import type { TmuxWebTheme } from '../themes/types.js';
 import { notesDbScript } from '../notes-db.js';
 import { notesUtilsScript } from '../notes-utils.js';
 
-export function renderNotesPage(session: string): string {
+export function renderNotesPage(session: string, theme: TmuxWebTheme): string {
 	const isGlobal = session === '__global__';
 	const label = isGlobal ? 'Global' : session;
 	const scope = isGlobal ? '__global__' : 'session:' + session;
@@ -17,7 +18,7 @@ export function renderNotesPage(session: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Notes — ${label} — tmux-web</title>
 <style>
-  ${cssVarsStyle()}
+  ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
   .container { max-width: 720px; margin: 40px auto; padding: 0 20px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }

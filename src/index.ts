@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, readdirSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { WebSocketServer, WebSocket } from "ws";
@@ -29,8 +31,9 @@ import { db, type StoredTask } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
 import { loadDotEnv } from "./lib/load-env.js";
-import { cmdAdd, cmdRemove, cmdList, cmdSetup, printUsage, printVersion } from "./lib/cli.js";
+import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
 import { readSettings } from "./lib/settings.js";
+import { readActiveTheme } from "./lib/theme-store.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
 import {
 	getSessionPaneTarget,
@@ -44,12 +47,26 @@ import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
 loadDotEnv();
 
 const terminalBufferConfig = readTerminalBufferConfig();
+type TerminalRenderer = "xterm" | "ghostty";
+
+function parseTerminalRenderer(args: string[]): TerminalRenderer {
+	const env = process.env.TMUX_WEB_TERMINAL_RENDERER?.trim().toLowerCase();
+	let renderer: TerminalRenderer = env === "ghostty" ? "ghostty" : "xterm";
+	for (const arg of args) {
+		if (arg === "--ghostty") renderer = "ghostty";
+		if (arg === "--xterm") renderer = "xterm";
+	}
+	return renderer;
+}
+
+const startupArgs = process.argv.slice(2);
+const terminalRenderer = parseTerminalRenderer(startupArgs);
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
 // don't try to bind a port or load the db.
 {
-	const args = process.argv.slice(2);
+	const args = startupArgs.filter((arg) => arg !== "--ghostty" && arg !== "--xterm");
 	if (args.length > 0) {
 		const [sub, arg] = args;
 		switch (sub) {
@@ -68,6 +85,9 @@ const terminalBufferConfig = readTerminalBufferConfig();
 				process.exit(0);
 			case "setup":
 				await cmdSetup(args);
+				process.exit(0);
+			case "theme":
+				await cmdTheme(args.slice(1));
 				process.exit(0);
 			case "help":
 			case "--help":
@@ -129,6 +149,7 @@ await db.read();
 db.data.sessionAccess ??= [];
 
 const settings = await readSettings();
+const activeTheme = await readActiveTheme();
 const commandbarEnabled = settings.commandbar === true;
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
@@ -159,6 +180,32 @@ const app = new Hono();
 
 registerExtensionRoutes(app, extsDir, extensions);
 
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const assetDirs = [
+	path.join(moduleDir, "assets"),
+	path.join(process.cwd(), "dist", "assets"),
+];
+
+app.get("/assets/:file", async (c) => {
+	const file = c.req.param("file");
+	if (!/^[a-zA-Z0-9._-]+$/.test(file)) return c.notFound();
+	for (const dir of assetDirs) {
+		const filePath = path.join(dir, file);
+		if (!existsSync(filePath)) continue;
+		const content = await readFile(filePath);
+		const ext = path.extname(file);
+		const mime: Record<string, string> = {
+			".css": "text/css; charset=utf-8",
+			".js": "application/javascript; charset=utf-8",
+			".map": "application/json; charset=utf-8",
+		};
+		return c.body(content, 200, {
+			"Content-Type": mime[ext] ?? "application/octet-stream",
+		});
+	}
+	return c.notFound();
+});
+
 // ── Page routes ────────────────────────────────────────────────────────────
 
 app.get("/", (c) => {
@@ -166,7 +213,7 @@ app.get("/", (c) => {
 	const sessions = listSessions();
 	const accessMap = getSessionAccessMap();
 	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
-	return c.html(renderLanding(sessions, { view, accessMap, commandbarEnabled, commandbarSessions }));
+	return c.html(renderLanding(sessions, { view, accessMap, commandbarEnabled, commandbarSessions, theme: activeTheme }));
 });
 
 app.get("/s/:session", async (c) => {
@@ -179,16 +226,18 @@ app.get("/s/:session", async (c) => {
 		commandbarEnabled,
 		commandbarSessions,
 		terminal: terminalBufferConfig,
+		theme: activeTheme,
+		renderer: terminalRenderer,
 	}));
 });
 
 app.get("/notes", (c) => {
-	return c.html(renderNotesIndex(db.data.notes));
+	return c.html(renderNotesIndex(db.data.notes, activeTheme));
 });
 
 app.get("/notes/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
-	return c.html(renderNotesPage(session));
+	return c.html(renderNotesPage(session, activeTheme));
 });
 
 app.get("/api/sessions", (c) => {

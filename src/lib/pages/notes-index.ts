@@ -1,5 +1,6 @@
 import { cssVarsStyle } from '../theme.js';
 import type { NoteRecord } from '../db.js';
+import type { TmuxWebTheme } from '../themes/types.js';
 
 function escapeHtml(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -10,7 +11,7 @@ function formatDate(ts: number): string {
 	return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function renderNotesIndex(notes: NoteRecord[]): string {
+export function renderNotesIndex(notes: NoteRecord[], theme: TmuxWebTheme): string {
 	const sorted = [...notes].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
 	const cards = sorted.map((n) => {
@@ -37,7 +38,7 @@ export function renderNotesIndex(notes: NoteRecord[]): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Notes — tmux-web</title>
 <style>
-  ${cssVarsStyle()}
+  ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
   .container { max-width: 640px; margin: 60px auto; padding: 0 20px; }
   .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }

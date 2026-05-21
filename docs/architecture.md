@@ -17,7 +17,7 @@ flowchart LR
 
 ## Components
 
-- **Landing page** — Lists all active tmux sessions; clicking one opens a full terminal view powered by [ghostty-web](https://github.com/nickolay/ghostty-web).
+- **Landing page** — Lists all active tmux sessions; clicking one opens a full terminal view powered by a local xterm.js client bundle.
 - **Terminal** — The browser connects over WebSocket; the server spawns `tmux attach-session` via a PTY. Resize, input, and scrollback work; the client auto-reconnects if the connection drops.
 
 ### Terminal buffer loading
@@ -38,7 +38,7 @@ If the pane is on the **alternate screen** (vim, less, etc.), no snapshot is sen
 | `TMUX_WEB_SYNC_IDLE_MS` | `200` | Idle time after last PTY byte before sync ends |
 | `TMUX_WEB_SYNC_MAX_MS` | `3000` | Maximum sync duration before live forwarding |
 
-WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`.
+WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`. The browser renderer is isolated in the terminal client bundle so the page shell, WebSocket protocol, and tmux capture flow can survive a future renderer swap.
 
 ### Image paste (Claude Code, OpenCode, etc.)
 
@@ -54,6 +54,8 @@ Paste (Cmd/Ctrl+V) prefers clipboard images over plain text when both are presen
 | `TMUX_WEB_MAX_IMAGE_UPLOAD_BYTES` | `10485760` (10 MiB) | Maximum upload size per image |
 
 If tmux-web is exposed beyond localhost, treat uploads as sensitive (paths are readable by processes on the host). No automatic cleanup of `uploads/` in v1.
+
+- **Themes** — Built-in templates (`vscode`, `ghostty`) define shell CSS variables and xterm palette. The active theme is persisted at `{configRoot}/tmux-web/theme.json` (e.g. `~/.config/tmux-web/theme.json`) and loaded once at server startup. Switch with `tmux-web theme set <name>` and restart the server. If the file is missing, `vscode` is written automatically (matches the previous default look).
 
 - **Notes** — Per-session and global Markdown scratchpads persist to `~/.tmux-web/db.json` via lowdb (or `~/.dev/.tmux-web/db.json` in dev mode). See [Notes](notes.md).
 - **Scheduler** — Queues `tmux send-keys` calls to fire after a delay and re-arms surviving tasks on restart. See [Scheduler](scheduler.md).

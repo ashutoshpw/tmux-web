@@ -30,6 +30,10 @@ export function getSettingsPath(): string {
   return path.join(getConfigRoot(), 'tmux-web', 'settings.json');
 }
 
+export function getThemePath(): string {
+  return path.join(getConfigRoot(), 'tmux-web', 'theme.json');
+}
+
 export function getPluginDir(): string {
   return path.join(getDataRoot(), 'node_modules');
 }

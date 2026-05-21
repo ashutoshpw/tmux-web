@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { getDataRoot, getSettingsPath } from './state-paths.js';
+import { getDataRoot, getSettingsPath, getThemePath } from './state-paths.js';
 import { readSettings } from './settings.js';
+import { readActiveTheme, setActiveThemeTemplate } from './theme-store.js';
+import { isThemeTemplateId, THEME_TEMPLATE_IDS } from './themes/index.js';
 import { cmdAdd, cmdRemove, getPluginDir } from './plugins.js';
 import { getEnvFilePath } from './load-env.js';
 import { SETUP_FEATURES, writeGithubPat } from './setup-features.js';
@@ -109,6 +111,44 @@ export async function cmdSetup(argv: string[]): Promise<void> {
   console.log('Restart tmux-web to apply UI changes.');
 }
 
+export async function cmdTheme(argv: string[]): Promise<void> {
+  const [sub, arg] = argv;
+  switch (sub) {
+    case 'list': {
+      console.log('Available themes:');
+      for (const id of THEME_TEMPLATE_IDS) {
+        console.log(`  ${id}`);
+      }
+      return;
+    }
+    case 'set': {
+      if (!arg) {
+        console.error('usage: tmux-web theme set <vscode|ghostty>');
+        process.exit(1);
+      }
+      if (!isThemeTemplateId(arg)) {
+        console.error(`unknown theme: ${arg}`);
+        console.error('Run: tmux-web theme list');
+        process.exit(1);
+      }
+      await setActiveThemeTemplate(arg);
+      console.log(`✓ theme set to ${arg}`);
+      console.log(`  ${getThemePath()}`);
+      console.log('Restart tmux-web to apply.');
+      return;
+    }
+    case 'show': {
+      const theme = await readActiveTheme();
+      console.log(`Active theme: ${theme.template}`);
+      console.log(`Config file:  ${getThemePath()}`);
+      return;
+    }
+    default:
+      console.error('usage: tmux-web theme <list|set|show>');
+      process.exit(1);
+  }
+}
+
 export async function cmdList(): Promise<void> {
   const cfg = await readSettings();
   const plugins = cfg.plugins ?? [];
@@ -135,6 +175,8 @@ export function printUsage(): void {
 
 Usage:
   tmux-web                       Start the server (PORT env var, default 3000)
+  tmux-web --ghostty             Start with ghostty-web instead of xterm.js
+  tmux-web --xterm               Start with xterm.js explicitly
   tmux-web -V, --version         Print version and exit
   tmux-web -h, --help            Show this help
   tmux-web setup                 Interactive feature setup
@@ -142,10 +184,17 @@ Usage:
   tmux-web add <package>         Install a plugin and enable it
   tmux-web remove <package>      Uninstall a plugin and disable it
   tmux-web list                  Show enabled plugins
+  tmux-web theme list            List available themes
+  tmux-web theme set <name>      Set active theme (vscode, ghostty)
+  tmux-web theme show            Show active theme
 
 Files:
   ${CONFIG_DISPLAY}   settings (plugins, commandbar)
+  ${getThemePath()}   active theme (shell + terminal colors)
   ${envDisplay}       secrets (loaded automatically)
   ${dataDirDisplay}/  plugin installs + runtime state
+
+Env:
+  TMUX_WEB_TERMINAL_RENDERER=xterm|ghostty
 `);
 }

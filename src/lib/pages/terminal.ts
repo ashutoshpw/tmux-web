@@ -1,4 +1,5 @@
 import { cssVarsStyle } from '../theme.js';
+import type { TmuxWebTheme } from '../themes/types.js';
 import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
 import { schedulerDrawerCSS, schedulerDrawerHTML, schedulerDrawerScript } from '../scheduler-drawer.js';
 import type { ExtManifest } from '../ext-loader.js';
@@ -121,10 +122,12 @@ export function renderTerminal(
 		commandbarEnabled?: boolean;
 		commandbarSessions?: CommandbarSession[];
 		terminal?: TerminalBufferConfig;
-	} = {},
+		theme: TmuxWebTheme;
+		renderer?: 'xterm' | 'ghostty';
+	},
 ): string {
 	const sidebarExts = extensions.filter(e => e.slot === 'sidebar');
-	const { commandbarEnabled = false, commandbarSessions = [] } = opts;
+	const { commandbarEnabled = false, commandbarSessions = [], theme, renderer = 'xterm' } = opts;
 	const terminalCfg = opts.terminal ?? {
 		initialLines: 1000,
 		historyChunk: 500,
@@ -142,13 +145,14 @@ export function renderTerminal(
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>tmux: ${sessionName}</title>
+<link rel="stylesheet" href="/assets/xterm.css" />
 <style>
-  ${cssVarsStyle()}
+  ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); height: 100%; width: 100%; overflow: hidden; }
   body { display: flex; flex-direction: column; }
   header {
     padding: 7px 16px;
-    background: linear-gradient(180deg, rgba(19, 28, 36, 0.98), rgba(13, 18, 24, 0.98));
+    background: var(--header-gradient);
     border-bottom: 1px solid var(--panel-border);
     display: flex;
     align-items: center;
@@ -195,7 +199,10 @@ export function renderTerminal(
   }
   header .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--panel-muted); transition: background 0.2s; }
   header .dot.connected { background: var(--panel-success); }
-  #terminal-container { flex: 1; width: 100%; overflow: hidden; }
+  #terminal-container { flex: 1; width: 100%; min-height: 0; overflow: hidden; background: var(--terminal-bg); }
+  #terminal-container .xterm { height: 100%; padding: 0; }
+  #terminal-container.terminal-pending .xterm { visibility: hidden; }
+  #terminal-container .xterm-viewport { overflow-y: auto; }
   #terminal-container.terminal-drag-over {
     outline: 2px dashed var(--panel-accent);
     outline-offset: -2px;
@@ -231,542 +238,21 @@ export function renderTerminal(
     <span id="status-text">connecting</span>
   </div>
 </header>
-<div id="terminal-container"></div>
+<div id="terminal-container" class="terminal-pending"></div>
 ${commandbarEnabled ? commandbarHTML() : ''}
 ${notesDrawerHTML(`Notes — ${sessionName}`)}
 ${schedulerDrawerHTML(`Scheduler — ${sessionName}`)}
 ${sidebarExts.map(e => extDrawerHTML(e)).join('\n')}
 
 <script type="module">
-import { init, Terminal } from 'https://esm.sh/ghostty-web@latest';
-
-await init();
-
-const TERMINAL_CFG = ${JSON.stringify(terminalCfg)};
-
-const term = new Terminal({
-  fontSize: 14,
-  fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
-  cursorBlink: true,
-  cursorStyle: 'bar',
-  scrollback: ${scrollback},
-  convertEol: false,
-  theme: {
-    foreground: '#ffffff',
-    background: '#282c34',
-    cursor: '#ffffff',
-    cursorAccent: '#282c34',
-    selectionBackground: '#ffffff',
-    selectionForeground: '#282c34',
-    black: '#1d1f21',
-    red: '#cc6666',
-    green: '#b5bd68',
-    yellow: '#f0c674',
-    blue: '#81a2be',
-    magenta: '#b294bb',
-    cyan: '#8abeb7',
-    white: '#c5c8c6',
-    brightBlack: '#666666',
-    brightRed: '#d54e53',
-    brightGreen: '#b9ca4a',
-    brightYellow: '#e7c547',
-    brightBlue: '#7aa6da',
-    brightMagenta: '#c397d8',
-    brightCyan: '#70c0b1',
-    brightWhite: '#eaeaea',
-  },
-});
-
-const container = document.getElementById('terminal-container');
-term.open(container);
-
-let cols = 80, rows = 24, ws, charW = 0, charH = 0;
-let fitRaf = 0;
-let fitTimer = 0;
-let touchGesture = null;
-let suppressTouchClickUntil = 0;
-
-let phase = 'connecting';
-let serverHistoryLoaded = 0;
-let historyLoading = false;
-let historyParts = [];
-let liveSuffix = '';
-
-function fullLoadedText() {
-  return historyParts.join('') + liveSuffix;
-}
-
-function isAtScrollbackTop() {
-  const buf = term.buffer?.active;
-  if (!buf) return false;
-  return buf.viewportY >= buf.baseY;
-}
-
-function rewriteTerminal(preserveScroll) {
-  const buf = term.buffer?.active;
-  const viewportY = preserveScroll && buf ? buf.viewportY : 0;
-  const baseY = preserveScroll && buf ? buf.baseY : 0;
-  const text = fullLoadedText();
-  term.reset();
-  if (!text) {
-    if (!preserveScroll) term.scrollToBottom?.();
-    return;
-  }
-  term.write(text, () => {
-    if (preserveScroll && typeof term.scrollToLine === 'function') {
-      term.scrollToLine(baseY + viewportY);
-    } else {
-      term.scrollToBottom?.();
-    }
-  });
-}
-
-function handleServerMessage(raw) {
-  let msg;
-  try {
-    msg = JSON.parse(raw);
-  } catch {
-    if (phase === 'live') {
-      liveSuffix += raw;
-      term.write(raw);
-    }
-    return;
-  }
-
-  if (msg.type === 'snapshot' && typeof msg.data === 'string') {
-    historyParts = [msg.data];
-    liveSuffix = '';
-    serverHistoryLoaded = typeof msg.lines === 'number' ? msg.lines : TERMINAL_CFG.initialLines;
-    phase = 'live';
-    term.reset();
-    if (msg.data) term.write(msg.data);
-    term.scrollToBottom?.();
-    return;
-  }
-
-  if (msg.type === 'history' && typeof msg.data === 'string') {
-    historyLoading = false;
-    if (msg.lines > 0 && msg.data) {
-      historyParts.unshift(msg.data);
-      serverHistoryLoaded += msg.lines;
-      rewriteTerminal(true);
-    }
-    return;
-  }
-
-  if (msg.type === 'data' && typeof msg.data === 'string') {
-    if (phase === 'connecting') {
-      phase = 'live';
-      liveSuffix = msg.data;
-      term.write(msg.data);
-      return;
-    }
-    if (phase === 'live') {
-      liveSuffix += msg.data;
-      term.write(msg.data);
-    }
-  }
-}
-
-function updateCellMetrics(force = false) {
-  const canvas = container.querySelector('canvas');
-  if (canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0 && cols > 0 && rows > 0) {
-    const nextW = canvas.offsetWidth / cols;
-    const nextH = canvas.offsetHeight / rows;
-    if (force || !charW || !charH) {
-      charW = nextW;
-      charH = nextH;
-    }
-  }
-  if (!charW || !charH) {
-    charW = 9.0;
-    charH = 18;
-  }
-}
-
-function getTerminalViewportRect() {
-  const rect = container.getBoundingClientRect();
-  const vv = window.visualViewport;
-  if (!vv) return rect;
-  return {
-    width: Math.min(rect.width, vv.width),
-    height: Math.max(0, Math.min(rect.height, vv.height - Math.max(0, rect.top))),
-  };
-}
-
-function fitTerminal(force = false) {
-  const rect = getTerminalViewportRect();
-  if (rect.width <= 0 || rect.height <= 0) return;
-  updateCellMetrics(force && (!charW || !charH));
-  const nc = Math.floor(rect.width / charW);
-  const nr = Math.floor(rect.height / charH);
-  if (nc < 10 || nr < 5) return;
-  if (force || nc !== cols || nr !== rows) {
-    cols = nc;
-    rows = nr;
-    term.resize(cols, rows);
-    sendJSON({ type: 'resize', cols, rows });
-  }
-}
-
-function scheduleFit(force = false) {
-  if (fitRaf) cancelAnimationFrame(fitRaf);
-  clearTimeout(fitTimer);
-  fitTerminal(force);
-  fitRaf = requestAnimationFrame(() => { fitRaf = 0; fitTerminal(force); });
-  fitTimer = setTimeout(() => fitTerminal(force), 120);
-}
-
-scheduleFit(true);
-window.addEventListener('resize', () => scheduleFit(true));
-window.visualViewport?.addEventListener('resize', () => scheduleFit(true));
-window.visualViewport?.addEventListener('scroll', () => scheduleFit(true));
-new ResizeObserver(() => scheduleFit(true)).observe(container);
-
-if (document.fonts?.ready) {
-  document.fonts.ready.then(() => {
-    scheduleFit(true);
-    setTimeout(() => scheduleFit(true), 50);
-    setTimeout(() => scheduleFit(true), 200);
-  });
-}
-
-function scheduleKeyboardFit() {
-  scheduleFit(true);
-  setTimeout(() => scheduleFit(true), 50);
-  setTimeout(() => scheduleFit(true), 150);
-  setTimeout(() => scheduleFit(true), 300);
-}
-
-container.addEventListener('focusin', () => scheduleKeyboardFit(), true);
-
-const dot = document.getElementById('status-dot');
-const statusText = document.getElementById('status-text');
-function setConnected(ok) {
-  dot.className = 'dot' + (ok ? ' connected' : '');
-  statusText.textContent = ok ? 'connected' : 'reconnecting';
-}
-
-const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = proto + '//' + location.host + '/ws/${sessionName}';
-const SESSION_NAME = ${JSON.stringify(sessionName)};
-const UPLOAD_URL = '/api/session/' + encodeURIComponent(SESSION_NAME) + '/upload';
-let reconnectDelay = 1000;
-const isSafari = /^((?!chrome|android|crios|fxios|edgios).)*safari/i.test(navigator.userAgent);
-
-function sendJSON(obj) {
-  if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-}
-
-function getTerminalCell(clientX, clientY) {
-  const canvas = container.querySelector('canvas');
-  const rect = (canvas || container).getBoundingClientRect();
-  updateCellMetrics(true);
-  const x = Math.max(1, Math.min(cols, Math.floor((clientX - rect.left) / charW) + 1));
-  const y = Math.max(1, Math.min(rows, Math.floor((clientY - rect.top) / charH) + 1));
-  return { x, y };
-}
-
-function wheelEventCount(event) {
-  const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE
-    ? 1
-    : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
-      ? rows
-      : 33;
-  return Math.max(1, Math.min(5, Math.round(Math.abs(event.deltaY / unit))));
-}
-
-function mouseModifierBits(event) {
-  return (event.shiftKey ? 4 : 0) + (event.altKey ? 8 : 0) + (event.ctrlKey ? 16 : 0);
-}
-
-function encodeSgrMouse(button, x, y) {
-  return '\\x1b[<' + button + ';' + x + ';' + y + 'M';
-}
-
-function encodeX10Mouse(button, x, y) {
-  if (x > 223 || y > 223) return '';
-  return '\\x1b[M'
-    + String.fromCharCode(32 + button)
-    + String.fromCharCode(32 + x)
-    + String.fromCharCode(32 + y);
-}
-
-function sendTerminalWheel(event) {
-  if (!term.hasMouseTracking?.() || event.deltaY === 0) return false;
-  const { x, y } = getTerminalCell(event.clientX, event.clientY);
-  const button = (event.deltaY < 0 ? 64 : 65) + mouseModifierBits(event);
-  const useSgr = term.getMode?.(1006) ?? true;
-  const sequence = useSgr ? encodeSgrMouse(button, x, y) : encodeX10Mouse(button, x, y);
-  if (!sequence) return false;
-  const count = wheelEventCount(event);
-  for (let i = 0; i < count; i++) sendJSON({ type: 'input', data: sequence });
-  return true;
-}
-
-function connect() {
-  ws = new WebSocket(wsUrl);
-  ws.onopen = () => {
-    phase = 'connecting';
-    serverHistoryLoaded = 0;
-    historyLoading = false;
-    historyParts = [];
-    liveSuffix = '';
-    try { term.reset(); } catch {}
-    setConnected(true);
-    reconnectDelay = 1000;
-    sendJSON({ type: 'resize', cols, rows });
-  };
-  ws.onmessage = (event) => {
-    if (typeof event.data === 'string') handleServerMessage(event.data);
-  };
-  ws.onclose = () => {
-    setConnected(false);
-    phase = 'connecting';
-    setTimeout(() => {
-      reconnectDelay = Math.min(reconnectDelay * 2, 10000);
-      connect();
-    }, reconnectDelay);
-  };
-  ws.onerror = () => ws.close();
-}
-
-function sendTerminalInput(data) {
-  sendJSON({ type: 'input', data });
-  if (phase === 'live') liveSuffix += data;
-}
-
-function pasteToTerminal(text) {
-  const normalized = text.split('\\r\\n').join('\\n').split('\\n').join('\\r');
-  const bracketed = term.getMode?.(2004) ?? false;
-  const payload = bracketed
-    ? '\\x1b[200~' + normalized + '\\x1b[201~'
-    : normalized;
-  sendTerminalInput(payload);
-}
-
-function pastePathToTerminal(filePath) {
-  sendTerminalInput(filePath);
-}
-
-function isImageMime(type) {
-  return typeof type === 'string' && type.startsWith('image/');
-}
-
-function getImageFileFromDataTransfer(dt) {
-  if (!dt?.files?.length) return null;
-  for (let i = 0; i < dt.files.length; i++) {
-    if (isImageMime(dt.files[i].type)) return dt.files[i];
-  }
-  return null;
-}
-
-function getImageFileFromClipboardData(cd) {
-  if (!cd?.items) return null;
-  for (let i = 0; i < cd.items.length; i++) {
-    const item = cd.items[i];
-    if (item.kind === 'file' && isImageMime(item.type)) return item.getAsFile();
-  }
-  return null;
-}
-
-function setUploadStatus(msg) {
-  if (msg) statusText.textContent = msg;
-  else setConnected(ws?.readyState === WebSocket.OPEN);
-}
-
-async function uploadImageBlob(blob) {
-  const fd = new FormData();
-  fd.append('file', blob, 'upload');
-  const res = await fetch(UPLOAD_URL, { method: 'POST', body: fd });
-  if (!res.ok) {
-    let err = 'upload failed';
-    try {
-      const j = await res.json();
-      if (j.error) err = j.error;
-    } catch {}
-    throw new Error(err);
-  }
-  const j = await res.json();
-  if (!j.path) throw new Error('no path in response');
-  return j.path;
-}
-
-async function ingestImageBlob(blob) {
-  try {
-    setUploadStatus('uploading…');
-    const filePath = await uploadImageBlob(blob);
-    pastePathToTerminal(filePath);
-    setUploadStatus(null);
-  } catch (e) {
-    console.warn('image upload:', e);
-    setUploadStatus('upload failed');
-    setTimeout(() => setUploadStatus(null), 2000);
-  }
-}
-
-term.onData((data) => sendTerminalInput(data));
-term.attachCustomWheelEventHandler(sendTerminalWheel);
-
-term.attachCustomKeyEventHandler((event) => {
-  if (event.type !== 'keydown') return false;
-  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyV') {
-    event.preventDefault();
-    (async () => {
-      try {
-        if (navigator.clipboard?.read) {
-          const items = await navigator.clipboard.read();
-          for (const item of items) {
-            for (const type of item.types) {
-              if (isImageMime(type)) {
-                const blob = await item.getType(type);
-                await ingestImageBlob(blob);
-                return;
-              }
-            }
-          }
-        }
-      } catch {}
-      try {
-        const text = await navigator.clipboard?.readText();
-        if (text) pasteToTerminal(text);
-      } catch {}
-    })();
-    return true;
-  }
-  return false;
-});
-
-let lastPasteAt = 0;
-async function handlePasteEvent(event) {
-  const cd = event.clipboardData;
-  const imageFile = getImageFileFromClipboardData(cd);
-  if (imageFile) {
-    event.preventDefault();
-    event.stopPropagation();
-    const now = Date.now();
-    if (now - lastPasteAt < 50) return;
-    lastPasteAt = now;
-    await ingestImageBlob(imageFile);
-    return;
-  }
-  const text = cd?.getData('text/plain');
-  if (!text) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const now = Date.now();
-  if (now - lastPasteAt < 50) return;
-  lastPasteAt = now;
-  pasteToTerminal(text);
-}
-container.addEventListener('paste', handlePasteEvent);
-if (term.textarea) term.textarea.addEventListener('paste', handlePasteEvent);
-
-let terminalDragDepth = 0;
-container.addEventListener('dragenter', (event) => {
-  event.preventDefault();
-  terminalDragDepth++;
-  if (getImageFileFromDataTransfer(event.dataTransfer)) {
-    container.classList.add('terminal-drag-over');
-  }
-});
-container.addEventListener('dragover', (event) => {
-  event.preventDefault();
-  if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
-});
-container.addEventListener('dragleave', (event) => {
-  event.preventDefault();
-  terminalDragDepth--;
-  if (terminalDragDepth <= 0) {
-    terminalDragDepth = 0;
-    container.classList.remove('terminal-drag-over');
-  }
-});
-container.addEventListener('drop', async (event) => {
-  event.preventDefault();
-  terminalDragDepth = 0;
-  container.classList.remove('terminal-drag-over');
-  const file = getImageFileFromDataTransfer(event.dataTransfer);
-  if (file) await ingestImageBlob(file);
-});
-
-term.onScroll(() => {
-  if (phase !== 'live' || historyLoading || !isAtScrollbackTop()) return;
-  historyLoading = true;
-  sendJSON({ type: 'load_history', before: serverHistoryLoaded });
-});
-
-document.addEventListener('keydown', (event) => {
-  if (!isSafari || event.key !== 'Escape') return;
-  if (event.defaultPrevented || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
-  const active = document.activeElement;
-  const terminalFocused = active === container || active === term.textarea || container.contains(active);
-  if (!terminalFocused) return;
-  event.preventDefault();
-  event.stopPropagation();
-  sendJSON({ type: 'input', data: '\\x1b' });
-}, true);
-
-function dispatchTerminalWheel(deltaY, clientX, clientY) {
-  const target = container.querySelector('canvas') || container;
-  target.dispatchEvent(new WheelEvent('wheel', {
-    deltaY, deltaMode: WheelEvent.DOM_DELTA_PIXEL,
-    clientX, clientY, bubbles: true, cancelable: true,
-  }));
-}
-
-function focusTerminal() {
-  const active = term.textarea || container.querySelector('textarea') || container;
-  active?.focus?.();
-  scheduleKeyboardFit();
-}
-
-container.addEventListener('touchstart', (event) => {
-  if (event.touches.length !== 1) { touchGesture = null; return; }
-  const touch = event.touches[0];
-  touchGesture = { startX: touch.clientX, startY: touch.clientY, lastX: touch.clientX, lastY: touch.clientY, scrolling: false };
-  event.stopPropagation();
-}, { passive: true, capture: true });
-
-container.addEventListener('touchmove', (event) => {
-  if (!touchGesture || event.touches.length !== 1) return;
-  const touch = event.touches[0];
-  const totalDy = touch.clientY - touchGesture.startY;
-  const totalDx = touch.clientX - touchGesture.startX;
-  if (!touchGesture.scrolling) {
-    if (Math.abs(totalDy) < 8 || Math.abs(totalDy) < Math.abs(totalDx)) return;
-    touchGesture.scrolling = true;
-    suppressTouchClickUntil = Date.now() + 500;
-  }
-  event.preventDefault();
-  event.stopPropagation();
-  dispatchTerminalWheel(-(touch.clientY - touchGesture.lastY), touch.clientX, touch.clientY);
-  touchGesture.lastX = touch.clientX;
-  touchGesture.lastY = touch.clientY;
-}, { passive: false, capture: true });
-
-container.addEventListener('touchend', (event) => {
-  if (!touchGesture) return;
-  const wasScrolling = touchGesture.scrolling;
-  touchGesture = null;
-  event.stopPropagation();
-  if (!wasScrolling) focusTerminal();
-  else { suppressTouchClickUntil = Date.now() + 500; event.preventDefault(); }
-}, { passive: false, capture: true });
-
-container.addEventListener('touchcancel', (event) => {
-  touchGesture = null;
-  event.stopPropagation();
-}, { passive: true, capture: true });
-
-container.addEventListener('pointerup', (event) => {
-  if (event.pointerType === 'touch' && Date.now() < suppressTouchClickUntil) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-}, true);
-
-connect();
+window.__TMUX_WEB_TERMINAL__ = ${JSON.stringify({
+	sessionName,
+	terminal: terminalCfg,
+	scrollback,
+	theme: theme.terminal,
+	renderer,
+}).replace(/</g, '\\u003c')};
+await import('/assets/terminal-client.js');
 
 // ========== NOTES ==========
 ${notesDrawerScript(`session:${sessionName}`)}
@@ -783,7 +269,7 @@ ${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions) : 
 
 ${sidebarExts.length > 0 ? `<script>
 // Extension bootstrap — plain script (not module) so it runs before the module
-// awaits ghostty-web, avoiding a race where iframes load during that await.
+// awaits terminal-client import, avoiding a race where iframes load during that await.
 ${sidebarExts.map(e => extDrawerScript(e, sessionName)).join('\n')}
 </script>` : ''}
 </body>

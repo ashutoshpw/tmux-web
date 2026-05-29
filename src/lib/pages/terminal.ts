@@ -147,7 +147,6 @@ export function renderTerminal(
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>tmux: ${sessionName}</title>
-<link rel="stylesheet" href="/assets/xterm.css" />
 <style>
   ${cssVarsStyle(theme.shell)}
   html, body { background: var(--page-bg); color: var(--page-fg); height: 100%; width: 100%; overflow: hidden; }
@@ -203,7 +202,9 @@ export function renderTerminal(
   header .dot.connected { background: var(--panel-success); }
   #terminal-container { flex: 1; width: 100%; min-height: 0; overflow: hidden; background: var(--terminal-bg); }
   #terminal-container .xterm { height: 100%; padding: 0; }
-  #terminal-container.terminal-pending .xterm { visibility: hidden; }
+  /* Hide whatever the active renderer mounts (xterm .xterm div or ghostty canvas)
+     until the first fit, so neither renderer flashes an unsized terminal. */
+  #terminal-container.terminal-pending > * { visibility: hidden; }
   #terminal-container .xterm-viewport { overflow-y: auto; }
   #terminal-container.terminal-drag-over {
     outline: 2px dashed var(--panel-accent);

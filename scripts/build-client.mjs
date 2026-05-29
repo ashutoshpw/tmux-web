@@ -14,7 +14,10 @@ const result = await Bun.build({
 	outdir: assetsDir,
 	target: 'browser',
 	format: 'esm',
-	splitting: false,
+	// Splitting must be on so the dynamically-imported xterm engine is emitted as
+	// a separate chunk (loaded on demand) instead of inlined into the entry. This
+	// keeps the --ghostty path from shipping any xterm code.
+	splitting: true,
 	minify: false,
 	sourcemap: 'none',
 	naming: {

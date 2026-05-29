@@ -1,5 +1,31 @@
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
+import type { FitAddon as FitAddonType } from '@xterm/addon-fit';
+import type { Terminal as XTerminalType } from '@xterm/xterm';
+
+// ghostty-web is pinned (not @latest) so a new upstream release can't silently
+// break the renderer. Both renderers are loaded on demand — neither the xterm
+// engine nor ghostty is in the static bundle, so --ghostty ships no xterm code
+// and the default ships no ghostty code.
+const GHOSTTY_WEB_URL = 'https://esm.sh/ghostty-web@0.4.0';
+
+// xterm needs its stylesheet to lay out correctly. It is injected only when an
+// XtermAdapter is actually created (default renderer, or ghostty fallback), so
+// ghostty mode never loads it.
+let xtermCssPromise: Promise<void> | undefined;
+function ensureXtermCss(): Promise<void> {
+	if (xtermCssPromise) return xtermCssPromise;
+	const existing = document.querySelector('link[data-tmux-web-xterm-css]');
+	if (existing) return (xtermCssPromise = Promise.resolve());
+	xtermCssPromise = new Promise<void>((resolve) => {
+		const link = document.createElement('link');
+		link.rel = 'stylesheet';
+		link.href = '/assets/xterm.css';
+		link.setAttribute('data-tmux-web-xterm-css', '');
+		link.addEventListener('load', () => resolve(), { once: true });
+		link.addEventListener('error', () => resolve(), { once: true });
+		document.head.appendChild(link);
+	});
+	return xtermCssPromise;
+}
 
 type TerminalBufferConfig = {
 	initialLines: number;
@@ -74,13 +100,25 @@ type TerminalAdapter = {
 };
 
 class XtermAdapter implements TerminalAdapter {
-	private readonly terminal: Terminal;
-	private readonly fitAddon = new FitAddon();
+	private readonly terminal: XTerminalType;
+	private readonly fitAddon: FitAddonType;
 	private readonly container: HTMLElement;
 
-	constructor(container: HTMLElement, scrollback: number, theme: TerminalTheme) {
+	private constructor(container: HTMLElement, terminal: XTerminalType, fitAddon: FitAddonType) {
 		this.container = container;
-		this.terminal = new Terminal({
+		this.terminal = terminal;
+		this.fitAddon = fitAddon;
+		this.terminal.loadAddon(this.fitAddon);
+		this.terminal.open(container);
+	}
+
+	static async create(container: HTMLElement, scrollback: number, theme: TerminalTheme): Promise<XtermAdapter> {
+		const [{ Terminal }, { FitAddon }] = await Promise.all([
+			import('@xterm/xterm'),
+			import('@xterm/addon-fit'),
+			ensureXtermCss(),
+		]);
+		const terminal = new Terminal({
 			fontSize: 14,
 			fontFamily: "'JetBrains Mono', 'SF Mono', 'Menlo', monospace",
 			cursorBlink: true,
@@ -89,8 +127,7 @@ class XtermAdapter implements TerminalAdapter {
 			convertEol: false,
 			theme,
 		});
-		this.terminal.loadAddon(this.fitAddon);
-		this.terminal.open(container);
+		return new XtermAdapter(container, terminal, new FitAddon());
 	}
 
 	get cols(): number {
@@ -187,8 +224,7 @@ class GhosttyAdapter implements TerminalAdapter {
 	}
 
 	static async create(container: HTMLElement, scrollback: number, theme: TerminalTheme): Promise<GhosttyAdapter> {
-		const url = 'https://esm.sh/ghostty-web@latest';
-		const mod = await import(url);
+		const mod = await import(GHOSTTY_WEB_URL);
 		await mod.init();
 		const terminal = new mod.Terminal({
 			fontSize: 14,
@@ -316,9 +352,30 @@ const terminalContainer = document.getElementById('terminal-container');
 if (!terminalContainer) throw new Error('missing terminal container');
 const container: HTMLElement = terminalContainer;
 
-const term: TerminalAdapter = cfg.renderer === 'ghostty'
-	? await GhosttyAdapter.create(container, cfg.scrollback, cfg.theme)
-	: new XtermAdapter(container, cfg.scrollback, cfg.theme);
+function showRendererFallbackNotice(): void {
+	const note = document.createElement('div');
+	note.textContent = 'ghostty-web unavailable — using xterm.js';
+	note.style.cssText =
+		'position:fixed;bottom:12px;right:12px;z-index:2000;background:rgba(0,0,0,0.85);' +
+		'color:#fbbf24;font:12px/1.4 "JetBrains Mono",monospace;padding:8px 12px;' +
+		'border:1px solid rgba(251,191,36,0.4);border-radius:6px;';
+	document.body.appendChild(note);
+	setTimeout(() => note.remove(), 6000);
+}
+
+async function createTerminal(): Promise<TerminalAdapter> {
+	if (cfg.renderer === 'ghostty') {
+		try {
+			return await GhosttyAdapter.create(container, cfg.scrollback, cfg.theme);
+		} catch (err) {
+			console.error('[tmux-web] ghostty-web failed to load; falling back to xterm.js:', err);
+			showRendererFallbackNotice();
+		}
+	}
+	return XtermAdapter.create(container, cfg.scrollback, cfg.theme);
+}
+
+const term: TerminalAdapter = await createTerminal();
 
 let ws: WebSocket | undefined;
 let fitRaf = 0;

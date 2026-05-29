@@ -26,14 +26,16 @@ try {
 	}
 } catch {}
 import { listSessions } from "./sessions.js";
-import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage } from "./frontend.js";
+import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, renderSettings, renderThemeSettings } from "./frontend.js";
 import { db, type StoredTask } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
 import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
-import { readSettings } from "./lib/settings.js";
-import { readActiveTheme } from "./lib/theme-store.js";
+import { readSettings, writeSettings } from "./lib/settings.js";
+import { readActiveTheme, setActiveThemeTemplate } from "./lib/theme-store.js";
+import { isThemeTemplateId } from "./lib/themes/index.js";
+import { installPlugin, uninstallPlugin } from "./lib/plugins.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
 import {
 	getSessionPaneTarget,
@@ -54,9 +56,17 @@ loadDotEnv();
 const terminalBufferConfig = readTerminalBufferConfig();
 type TerminalRenderer = "xterm" | "ghostty";
 
-function parseTerminalRenderer(args: string[]): TerminalRenderer {
+// Resolve the terminal renderer with precedence: flag > env > setting > default.
+// The CLI flag is explicit per-run, the env var is a session override, and the
+// saved setting (settings.json terminalRenderer) is the persistent baseline.
+function resolveTerminalRenderer(
+	args: string[],
+	fromSettings: TerminalRenderer | undefined,
+): TerminalRenderer {
+	let renderer: TerminalRenderer = "xterm";
+	if (fromSettings === "ghostty" || fromSettings === "xterm") renderer = fromSettings;
 	const env = process.env.TMUX_WEB_TERMINAL_RENDERER?.trim().toLowerCase();
-	let renderer: TerminalRenderer = env === "ghostty" ? "ghostty" : "xterm";
+	if (env === "ghostty" || env === "xterm") renderer = env;
 	for (const arg of args) {
 		if (arg === "--ghostty") renderer = "ghostty";
 		if (arg === "--xterm") renderer = "xterm";
@@ -65,7 +75,6 @@ function parseTerminalRenderer(args: string[]): TerminalRenderer {
 }
 
 const startupArgs = process.argv.slice(2);
-const terminalRenderer = parseTerminalRenderer(startupArgs);
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
@@ -156,6 +165,7 @@ db.data.sessionAccess ??= [];
 const settings = await readSettings();
 const activeTheme = await readActiveTheme();
 const commandbarEnabled = settings.commandbar === true;
+const terminalRenderer = resolveTerminalRenderer(startupArgs, settings.terminalRenderer);
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
@@ -182,6 +192,24 @@ if (missed.length) {
 }
 
 const app = new Hono();
+
+// CSRF defense for every state-changing request. The classic CSRF vector is a
+// cross-origin <form> POST auto-submitted by a page the user happens to be
+// visiting; here that is especially dangerous because POST /settings/plugins
+// shells out to `npm install`, whose lifecycle scripts run arbitrary code
+// (CSRF -> RCE). Browsers attach Sec-Fetch-Site on navigations/submissions:
+// our own same-origin pages send "same-origin", direct navigation / non-browser
+// clients (curl) send "none" or omit it entirely, while a cross-site attacker
+// form carries "cross-site"/"same-site". Allow the first two, reject the rest.
+app.use("*", async (c, next) => {
+	const method = c.req.method;
+	if (method === "GET" || method === "HEAD" || method === "OPTIONS") return next();
+	const site = c.req.header("sec-fetch-site");
+	if (site && site !== "same-origin" && site !== "none") {
+		return c.text("cross-site request blocked", 403);
+	}
+	return next();
+});
 
 registerExtensionRoutes(app, extsDir, extensions);
 
@@ -214,7 +242,10 @@ app.get("/assets/:file", async (c) => {
 // ── Page routes ────────────────────────────────────────────────────────────
 
 app.get("/", (c) => {
-	const view = c.req.query("view") === "recent" ? "recent" : "default";
+	const q = c.req.query("view");
+	const view = q === "recent" ? "recent"
+		: q === "default" ? "default"
+		: (settings.defaultView ?? "default");
 	const sessions = listSessions();
 	const accessMap = getSessionAccessMap();
 	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
@@ -243,6 +274,78 @@ app.get("/notes", (c) => {
 app.get("/notes/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	return c.html(renderNotesPage(session, activeTheme));
+});
+
+// ── Settings pages ───────────────────────────────────────────────────────────
+
+app.get("/settings", async (c) => {
+	const current = await readSettings();
+	const savedRenderer = current.terminalRenderer ?? "xterm";
+	return c.html(renderSettings({
+		settings: current,
+		renderer: terminalRenderer,
+		rendererOverridden: terminalRenderer !== savedRenderer,
+		theme: activeTheme,
+		plugins: current.plugins ?? [],
+		saved: c.req.query("saved") === "1",
+		error: c.req.query("error") ? decodeURIComponent(c.req.query("error")!) : undefined,
+	}));
+});
+
+app.post("/settings", async (c) => {
+	let body: Record<string, unknown>;
+	try { body = await c.req.parseBody(); } catch { return c.redirect("/settings?error=" + encodeURIComponent("invalid form body"), 303); }
+
+	const current = await readSettings();
+	const renderer = body.terminalRenderer === "ghostty" ? "ghostty" : "xterm";
+	const defaultView = body.defaultView === "recent" ? "recent" : "default";
+
+	await writeSettings({
+		...current,
+		commandbar: body.commandbar !== undefined,
+		terminalRenderer: renderer,
+		defaultView,
+	});
+	return c.redirect("/settings?saved=1", 303);
+});
+
+app.post("/settings/plugins", async (c) => {
+	let body: Record<string, unknown>;
+	try { body = await c.req.parseBody(); } catch { return c.redirect("/settings?error=" + encodeURIComponent("invalid form body"), 303); }
+
+	const action = body.action;
+	const pkg = typeof body.pkg === "string" ? body.pkg.trim() : "";
+	if (!pkg) return c.redirect("/settings?error=" + encodeURIComponent("missing package name"), 303);
+
+	const result = action === "remove"
+		? await uninstallPlugin(pkg)
+		: action === "add"
+			? await installPlugin(pkg)
+			: { ok: false, output: "unknown action" };
+
+	if (!result.ok) {
+		return c.redirect("/settings?error=" + encodeURIComponent(result.output.slice(0, 800)), 303);
+	}
+	return c.redirect("/settings?saved=1", 303);
+});
+
+app.get("/settings/theme", (c) => {
+	return c.html(renderThemeSettings({
+		theme: activeTheme,
+		saved: c.req.query("saved") === "1",
+	}));
+});
+
+app.post("/settings/theme", async (c) => {
+	let body: Record<string, unknown>;
+	try { body = await c.req.parseBody(); } catch { return c.redirect("/settings/theme?error=1", 303); }
+
+	const template = body.template;
+	if (typeof template !== "string" || !isThemeTemplateId(template)) {
+		return c.redirect("/settings/theme", 303);
+	}
+	await setActiveThemeTemplate(template);
+	return c.redirect("/settings/theme?saved=1", 303);
 });
 
 app.get("/api/sessions", (c) => {

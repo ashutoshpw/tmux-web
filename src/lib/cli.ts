@@ -194,7 +194,9 @@ Files:
   ${envDisplay}       secrets (loaded automatically)
   ${dataDirDisplay}/  plugin installs + runtime state
 
+Most of these are also editable from the browser at /settings and /settings/theme.
+
 Env:
-  TMUX_WEB_TERMINAL_RENDERER=xterm|ghostty
+  TMUX_WEB_TERMINAL_RENDERER=xterm|ghostty   (also persistable via /settings)
 `);
 }

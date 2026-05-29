@@ -5,6 +5,8 @@ import { getSettingsPath } from './state-paths.js';
 export interface TmuxWebSettings {
 	plugins?: string[];
 	commandbar?: boolean;
+	terminalRenderer?: 'xterm' | 'ghostty';
+	defaultView?: 'default' | 'recent';
 }
 
 const CONFIG_PATH = getSettingsPath();

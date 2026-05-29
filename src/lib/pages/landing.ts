@@ -182,6 +182,7 @@ export function renderLanding(
   ${empty}
   <a href="${refreshHref}" class="refresh">refresh</a>
   <a href="/notes" class="notes-link">View all notes</a>
+  <a href="/schedule" class="notes-link">View scheduled tasks</a>
 </div>
 ${commandbarEnabled ? commandbarHTML() : ''}
 ${notesDrawerHTML('Notes — Global')}

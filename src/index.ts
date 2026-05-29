@@ -26,7 +26,7 @@ try {
 	}
 } catch {}
 import { listSessions } from "./sessions.js";
-import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, renderSettings, renderThemeSettings } from "./frontend.js";
+import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, renderSettings, renderThemeSettings, renderScheduleIndex } from "./frontend.js";
 import { db, type StoredTask } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
@@ -274,6 +274,15 @@ app.get("/notes", (c) => {
 app.get("/notes/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	return c.html(renderNotesPage(session, activeTheme));
+});
+
+app.get("/schedule", (c) => {
+	const tasks = [...scheduledTasks.values()]
+		.map(({ id, sessionName, windowIndex, text, fireAt, createdAt }) => ({
+			id, sessionName, windowIndex, text, fireAt, createdAt,
+			remainingMs: Math.max(0, fireAt - Date.now()),
+		}));
+	return c.html(renderScheduleIndex(tasks, activeTheme));
 });
 
 // ── Settings pages ───────────────────────────────────────────────────────────

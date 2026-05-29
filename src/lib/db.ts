@@ -19,6 +19,18 @@ export interface StoredTask {
 	createdAt: number;
 }
 
+export interface TriggeredTaskRecord {
+	id: string;
+	sessionName: string;
+	windowIndex: number;
+	text: string;
+	fireAt: number;       // when it was scheduled to fire
+	createdAt: number;    // when it was scheduled
+	triggeredAt: number;  // when it actually fired / was detected missed
+	status: 'ok' | 'error' | 'missed';
+	error?: string;
+}
+
 export interface SessionAccessRecord {
 	name: string;
 	lastAccessedAt: number; // ms timestamp
@@ -35,6 +47,7 @@ export interface WatchedPaneRecord {
 export interface DbSchema {
 	notes: NoteRecord[];
 	scheduledTasks: StoredTask[];
+	triggeredTasks: TriggeredTaskRecord[];
 	sessionAccess: SessionAccessRecord[];
 	watchedPanes: WatchedPaneRecord[];
 }
@@ -44,5 +57,5 @@ mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(
 	new JSONFile<DbSchema>(join(dbDir, 'db.json')),
-	{ notes: [], scheduledTasks: [], sessionAccess: [], watchedPanes: [] },
+	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], watchedPanes: [] },
 );

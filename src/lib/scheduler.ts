@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import type { DbSchema, StoredTask } from './db.js';
+import type { DbSchema, StoredTask, TriggeredTaskRecord } from './db.js';
+
+const DEFAULT_HISTORY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 export interface ScheduledTask extends StoredTask {
 	timeoutHandle: ReturnType<typeof setTimeout>;
@@ -26,6 +28,8 @@ export interface SchedulerDeps {
 	sendKeys?: (sessionName: string, windowIndex: number, text: string) => void;
 	onError?: (err: unknown) => void;
 	onMissedTask?: (task: StoredTask) => void;
+	/** How long fired/missed tasks are kept in the Recently Triggered history. */
+	historyRetentionMs?: number;
 }
 
 export function sendTmuxKeys(sessionName: string, windowIndex: number, text: string): void {
@@ -54,6 +58,7 @@ export class SchedulerService {
 	private readonly sendKeys: (sessionName: string, windowIndex: number, text: string) => void;
 	private readonly onError: (err: unknown) => void;
 	private readonly onMissedTask: (task: StoredTask) => void;
+	private readonly historyRetentionMs: number;
 
 	constructor(private readonly deps: SchedulerDeps) {
 		this.now = deps.now ?? Date.now;
@@ -63,6 +68,24 @@ export class SchedulerService {
 		this.sendKeys = deps.sendKeys ?? sendTmuxKeys;
 		this.onError = deps.onError ?? ((err) => console.error(err));
 		this.onMissedTask = deps.onMissedTask ?? (() => {});
+		this.historyRetentionMs = deps.historyRetentionMs ?? DEFAULT_HISTORY_RETENTION_MS;
+	}
+
+	/** Append a triggered-task record and prune any that fall outside the retention window. */
+	private record(rec: TriggeredTaskRecord): void {
+		this.deps.db.data.triggeredTasks ??= [];
+		this.deps.db.data.triggeredTasks.push(rec);
+		const cutoff = this.now() - this.historyRetentionMs;
+		this.deps.db.data.triggeredTasks = this.deps.db.data.triggeredTasks.filter((r) => r.triggeredAt >= cutoff);
+	}
+
+	/** History of fired/missed tasks within the retention window, newest first. */
+	listTriggered(): TriggeredTaskRecord[] {
+		this.deps.db.data.triggeredTasks ??= [];
+		const cutoff = this.now() - this.historyRetentionMs;
+		return this.deps.db.data.triggeredTasks
+			.filter((r) => r.triggeredAt >= cutoff)
+			.sort((a, b) => b.triggeredAt - a.triggeredAt);
 	}
 
 	async restoreFromDb(): Promise<void> {
@@ -73,13 +96,24 @@ export class SchedulerService {
 			if (task.fireAt <= now) {
 				missed.push(task.id);
 				this.onMissedTask(task);
+				this.record({ ...task, triggeredAt: now, status: 'missed' });
 			} else {
 				this.scheduleExisting(task, task.fireAt - now);
 			}
 		}
 
+		// Prune stale history on startup even when nothing was missed.
+		this.deps.db.data.triggeredTasks ??= [];
+		const before = this.deps.db.data.triggeredTasks.length;
+		const cutoff = now - this.historyRetentionMs;
+		this.deps.db.data.triggeredTasks = this.deps.db.data.triggeredTasks.filter((r) => r.triggeredAt >= cutoff);
+		const prunedHistory = this.deps.db.data.triggeredTasks.length !== before;
+
 		if (missed.length) {
 			this.deps.db.data.scheduledTasks = this.deps.db.data.scheduledTasks.filter((t) => !missed.includes(t.id));
+		}
+
+		if (missed.length || prunedHistory) {
 			await this.deps.db.write();
 		}
 	}
@@ -140,10 +174,14 @@ export class SchedulerService {
 	}
 
 	private fireTask(task: StoredTask): void {
+		const triggeredAt = this.now();
 		try {
 			this.sendKeys(task.sessionName, task.windowIndex, task.text);
+			this.record({ ...task, triggeredAt, status: 'ok' });
 		} catch (err: any) {
-			this.onError(`[scheduler] send-keys to ${task.sessionName}:${task.windowIndex} failed: ${err.message ?? err}`);
+			const message = String(err?.message ?? err);
+			this.onError(`[scheduler] send-keys to ${task.sessionName}:${task.windowIndex} failed: ${message}`);
+			this.record({ ...task, triggeredAt, status: 'error', error: message });
 		}
 		this.scheduledTasks.delete(task.id);
 		this.deps.db.data.scheduledTasks = this.deps.db.data.scheduledTasks.filter((t) => t.id !== task.id);

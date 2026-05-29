@@ -19,6 +19,19 @@ On server restart, surviving tasks are re-armed. Tasks whose fire time already p
 [scheduler] dropped missed task <id> (was due <ISO timestamp>)
 ```
 
+## Recently Triggered history
+
+The `/schedule` page has two tabs:
+
+- **Upcoming** (default) — pending tasks with a live countdown, grouped by session.
+- **Recently Triggered** — a history of tasks that fired (`ok` / `error`) or were dropped at startup
+  as overdue (`missed`). Each row deep-links to `/s/<session>?window=<index>`, which opens the
+  session and switches tmux to the target window.
+
+History is retained for **7 days** by default. Change it with the **Schedule history** setting on the
+`/settings` page, or by setting `scheduleHistoryDays` (1–365) in `settings.json`. Records outside the
+window are pruned when a task fires and on server startup.
+
 ## Limits
 
 | Constraint | Value |

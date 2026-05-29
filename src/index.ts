@@ -83,6 +83,13 @@ function resolveTerminalRenderer(
 	return renderer;
 }
 
+// Clamp the schedule history retention to a sane integer day count (default 7).
+const DEFAULT_SCHEDULE_HISTORY_DAYS = 7;
+function clampHistoryDays(value: number | undefined): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SCHEDULE_HISTORY_DAYS;
+	return Math.min(365, Math.max(1, Math.round(value)));
+}
+
 const startupArgs = process.argv.slice(2);
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
@@ -148,16 +155,13 @@ function sendServerMessage(ws: WebSocket, msg: ServerMessage) {
 
 const activePtys = new Set<pty.IPty>();
 const extChildren: import("node:child_process").ChildProcess[] = [];
-const scheduler = new SchedulerService({
-	db,
-	onMissedTask: (task) =>
-		console.warn(`[scheduler] dropped missed task ${task.id} (was due ${new Date(task.fireAt).toISOString()})`),
-});
 
-// Init db and re-schedule surviving tasks before starting server
+// Init db and read settings before constructing the scheduler so history
+// retention (settings.scheduleHistoryDays) applies to the startup prune too.
 await db.read();
 db.data.sessionAccess ??= [];
 db.data.watchedPanes ??= [];
+db.data.triggeredTasks ??= [];
 
 const settings = await readSettings();
 const activeTheme = await readActiveTheme();
@@ -165,11 +169,19 @@ const commandbarEnabled = settings.commandbar === true;
 const agentsEnabled = settings.agents === true;
 const agentsBackgroundWatch = agentsEnabled && settings.agentsBackgroundWatch === true;
 const terminalRenderer = resolveTerminalRenderer(startupArgs, settings.terminalRenderer);
+const scheduleHistoryDays = clampHistoryDays(settings.scheduleHistoryDays);
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
 	if (ext.start) extChildren.push(spawnExtensionBackend(ext.dir, ext));
 }
+
+const scheduler = new SchedulerService({
+	db,
+	historyRetentionMs: scheduleHistoryDays * 86_400_000,
+	onMissedTask: (task) =>
+		console.warn(`[scheduler] dropped missed task ${task.id} (was due ${new Date(task.fireAt).toISOString()})`),
+});
 
 await scheduler.restoreFromDb();
 
@@ -296,7 +308,7 @@ app.get("/notes/:session", (c) => {
 });
 
 app.get("/schedule", (c) => {
-	return c.html(renderScheduleIndex(scheduler.list(), activeTheme));
+	return c.html(renderScheduleIndex(scheduler.list(), scheduler.listTriggered(), activeTheme, scheduleHistoryDays));
 });
 
 app.get("/agents", (c) => {
@@ -335,6 +347,9 @@ app.post("/settings", async (c) => {
 	const current = await readSettings();
 	const renderer = body.terminalRenderer === "ghostty" ? "ghostty" : "xterm";
 	const defaultView = body.defaultView === "recent" ? "recent" : "default";
+	const historyDays = clampHistoryDays(
+		typeof body.scheduleHistoryDays === "string" ? Number(body.scheduleHistoryDays) : undefined,
+	);
 
 	await writeSettings({
 		...current,
@@ -343,6 +358,7 @@ app.post("/settings", async (c) => {
 		agentsBackgroundWatch: body.agentsBackgroundWatch !== undefined,
 		terminalRenderer: renderer,
 		defaultView,
+		scheduleHistoryDays: historyDays,
 	});
 	return c.redirect("/settings?saved=1", 303);
 });

@@ -7,7 +7,9 @@ function createDb(initial?: Partial<DbSchema>) {
 		data: {
 			notes: [],
 			scheduledTasks: [],
+			triggeredTasks: [],
 			sessionAccess: [],
+			watchedPanes: [],
 			...initial,
 		},
 		write: vi.fn(async () => {}),
@@ -73,6 +75,58 @@ describe('SchedulerService', () => {
 		expect(db.data.scheduledTasks).toEqual([]);
 		expect(scheduler.list()).toEqual([]);
 		expect(db.write).toHaveBeenCalledTimes(2);
+
+		// History records the successful fire.
+		expect(db.data.triggeredTasks).toEqual([
+			expect.objectContaining({ id: 'task-1', sessionName: 'dev', windowIndex: 1, text: 'echo ok', triggeredAt: 10, status: 'ok' }),
+		]);
+		expect(scheduler.listTriggered()).toEqual([expect.objectContaining({ id: 'task-1', status: 'ok' })]);
+	});
+
+	it('records an error when send-keys throws but still removes the task', async () => {
+		const db = createDb();
+		let callback: (() => void) | undefined;
+		const scheduler = new SchedulerService({
+			db,
+			now: () => 10,
+			createId: () => 'task-1',
+			setTimer: vi.fn((cb) => {
+				callback = cb;
+				return 1 as any;
+			}) as any,
+			sendKeys: vi.fn(() => { throw new Error('no such window'); }),
+			onError: vi.fn(),
+		});
+
+		await scheduler.create({ sessionName: 'dev', windowIndex: 9, text: 'boom', delayMs: 20 });
+		callback?.();
+
+		expect(db.data.scheduledTasks).toEqual([]);
+		expect(db.data.triggeredTasks).toEqual([
+			expect.objectContaining({ id: 'task-1', status: 'error', error: 'no such window' }),
+		]);
+	});
+
+	it('prunes triggered history outside the retention window', async () => {
+		const now = 10_000_000;
+		const db = createDb({
+			triggeredTasks: [
+				{ id: 'old', sessionName: 'a', windowIndex: 0, text: 'old', fireAt: 1, createdAt: 1, triggeredAt: now - 200, status: 'ok' },
+				{ id: 'fresh', sessionName: 'a', windowIndex: 0, text: 'fresh', fireAt: 1, createdAt: 1, triggeredAt: now - 50, status: 'ok' },
+			],
+		});
+		const scheduler = new SchedulerService({
+			db,
+			now: () => now,
+			historyRetentionMs: 100,
+			setTimer: vi.fn(() => 1 as any) as any,
+			sendKeys: vi.fn(),
+		});
+
+		await scheduler.restoreFromDb();
+
+		expect(db.data.triggeredTasks.map((r) => r.id)).toEqual(['fresh']);
+		expect(scheduler.listTriggered().map((r) => r.id)).toEqual(['fresh']);
 	});
 
 	it('restores future tasks and drops missed tasks', async () => {
@@ -97,5 +151,11 @@ describe('SchedulerService', () => {
 		expect(db.data.scheduledTasks.map((task) => task.id)).toEqual(['future']);
 		expect(scheduler.list()).toEqual([expect.objectContaining({ id: 'future', remainingMs: 50 })]);
 		expect(db.write).toHaveBeenCalledTimes(1);
+
+		// The missed task is recorded in history with a 'missed' status.
+		expect(db.data.triggeredTasks).toEqual([
+			expect.objectContaining({ id: 'missed', triggeredAt: 50, status: 'missed' }),
+		]);
+		expect(scheduler.listTriggered()).toEqual([expect.objectContaining({ id: 'missed', status: 'missed' })]);
 	});
 });

@@ -11,6 +11,8 @@ export interface TmuxWebSettings {
 	agents?: boolean;
 	/** Probe watched panes on a background interval (even when /agents is closed). */
 	agentsBackgroundWatch?: boolean;
+	/** Days to retain the /schedule "Recently Triggered" history. Defaults to 7. */
+	scheduleHistoryDays?: number;
 }
 
 const CONFIG_PATH = getSettingsPath();

@@ -72,6 +72,12 @@ function pageHead(title: string, theme: TmuxWebTheme): string {
     border-radius: 6px; padding: 7px 10px;
   }
   .plugin-add input[type=text]:focus { outline: none; border-color: var(--panel-accent); }
+  .num-input {
+    width: 90px; font-size: 12px; font-family: inherit; color: var(--page-fg);
+    background: var(--page-bg); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 7px 10px;
+  }
+  .num-input:focus { outline: none; border-color: var(--panel-accent); }
   .suggest { font-size: 11px; color: var(--panel-muted); margin-top: 8px; }
   .suggest button { background: none; border: none; color: var(--panel-accent); cursor: pointer; font: inherit; font-size: 11px; padding: 0; text-decoration: underline; }
   .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -113,6 +119,7 @@ export function renderSettings(opts: {
 	const agentsBackgroundWatchOn = settings.agentsBackgroundWatch === true;
 	const savedRenderer = settings.terminalRenderer ?? 'xterm';
 	const defaultView = settings.defaultView ?? 'default';
+	const scheduleHistoryDays = settings.scheduleHistoryDays ?? 7;
 
 	const pluginRows = plugins.length
 		? plugins.map((p) => `<div class="plugin-row">
@@ -175,6 +182,12 @@ export function renderSettings(opts: {
         <label class="row"><input type="radio" name="defaultView" value="default" ${defaultView === 'default' ? 'checked' : ''} /> Default</label>
         <label class="row"><input type="radio" name="defaultView" value="recent" ${defaultView === 'recent' ? 'checked' : ''} /> Last Updated</label>
       </div>
+    </div>
+
+    <div class="section">
+      <h2>Schedule history</h2>
+      <p class="desc">Days to keep the <code>/schedule</code> "Recently Triggered" history (fired &amp; missed tasks). 1–365, default 7.</p>
+      <label class="row"><input type="number" class="num-input" name="scheduleHistoryDays" min="1" max="365" value="${scheduleHistoryDays}" /> days</label>
     </div>
 
     <div class="form-actions">

@@ -282,6 +282,19 @@ ${schedulerDrawerScript(sessionName)}
 // ========== WINDOWS ==========
 ${windowsDrawerScript(sessionName)}
 
+// ========== WINDOW DEEP-LINK (?window=N) ==========
+{
+  const wParam = new URLSearchParams(location.search).get('window');
+  const wIndex = wParam === null ? NaN : parseInt(wParam, 10);
+  if (Number.isInteger(wIndex) && wIndex >= 0) {
+    fetch('/api/session/' + encodeURIComponent(${JSON.stringify(sessionName)}) + '/select-window', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windowIndex: wIndex }),
+    }).catch(() => {});
+  }
+}
+
 // ========== MOBILE TOOLBAR ==========
 ${mobileToolbarScript(sessionName)}
 

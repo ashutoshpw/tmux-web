@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    :root {
+      --bg:      #11161d;
+      --border:  #243241;
+      --fg:      #d0d0d0;
+      --muted:   #8a97a6;
+      --accent:  #f3f7fb;
+      --success: #73c991;
+      --danger:  #f14c4c;
+      --warn:    #e9c46a;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'JetBrains Mono', monospace, ui-monospace;
+      background: var(--bg);
+      color: var(--fg);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    #header {
+      padding: 8px 12px 6px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    #header-title { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+    #session-label { font-size: 10px; color: var(--muted); }
+
+    .section {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .row:last-child { margin-bottom: 0; }
+
+    .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; min-width: 72px; }
+
+    .badge {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .badge.active { border-color: var(--success); color: var(--success); }
+
+    .changes { font-size: 11px; }
+    .changes .add { color: var(--success); }
+    .changes .del { color: var(--danger); }
+
+    select, input, textarea {
+      flex: 1;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--fg);
+      font-family: inherit;
+      font-size: 11px;
+      padding: 5px 7px;
+      outline: none;
+    }
+    select:focus, input:focus, textarea:focus { border-color: rgba(125,211,252,0.4); }
+
+    textarea { min-height: 64px; resize: vertical; width: 100%; }
+
+    .path {
+      font-size: 10px;
+      color: var(--muted);
+      word-break: break-all;
+      line-height: 1.4;
+    }
+
+    .btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 10px;
+      transition: color 0.12s, border-color 0.12s;
+    }
+    .btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn.primary { border-color: var(--success); color: var(--success); }
+    .btn.danger { border-color: var(--danger); color: var(--danger); }
+    .btn-block { width: 100%; text-align: center; margin-top: 8px; }
+
+    #loading, #empty-state {
+      padding: 24px 12px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 11px;
+      line-height: 1.7;
+    }
+
+    #panel { display: none; }
+
+    .menu-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 0;
+      cursor: pointer;
+      color: var(--fg);
+      border: none;
+      background: none;
+      font-family: inherit;
+      font-size: 11px;
+      width: 100%;
+      text-align: left;
+    }
+    .menu-item:hover { color: var(--accent); }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.55);
+      z-index: 10;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      width: 100%;
+      max-width: 320px;
+      padding: 12px;
+    }
+    .modal h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .modal .actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .field { margin-bottom: 10px; }
+    .field label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .err { font-size: 10px; color: var(--danger); margin-top: 6px; min-height: 14px; }
+
+    #footer {
+      padding: 6px 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 10px;
+    }
+    #refresh-btn {
+      background: none; border: none;
+      color: var(--muted); cursor: pointer;
+      font-size: 10px; font-family: inherit;
+    }
+    #refresh-btn:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div>
+    <div id="header-title">Environment</div>
+    <div id="session-label">session: —</div>
+  </div>
+</div>
+
+<div id="loading">connecting</div>
+
+<div id="empty-state" style="display:none">
+  Works with GitHub repositories only.<br>
+  Open a pane in a GitHub-linked git repo.
+</div>
+
+<div id="panel">
+  <div class="section">
+    <div class="row">
+      <span class="label">Kind</span>
+      <span id="kind-local" class="badge">Local</span>
+      <span id="kind-worktree" class="badge">Worktree</span>
+    </div>
+    <div class="row">
+      <span class="label">Changes</span>
+      <span id="changes" class="changes">+0 -0</span>
+    </div>
+    <div class="row">
+      <span class="label">Branch</span>
+      <span id="branch-display" style="font-size:11px">—</span>
+    </div>
+    <div class="row" id="branch-select-row">
+      <span class="label">Handoff</span>
+      <select id="branch-select"></select>
+    </div>
+    <div class="path" id="path-display"></div>
+    <div class="path" id="main-repo-row" style="display:none;margin-top:6px">
+      Main: <span id="main-repo-path"></span>
+      <button class="btn" id="copy-main-btn" style="margin-left:6px;padding:2px 6px">copy</button>
+    </div>
+  </div>
+
+  <div class="section" id="local-actions">
+    <button class="menu-item" id="handoff-btn">↔ Handoff to worktree</button>
+  </div>
+
+  <div class="section">
+    <button class="btn btn-block primary" id="commit-push-btn" disabled>Commit or push</button>
+  </div>
+</div>
+
+<div id="footer">
+  <span id="last-refresh">—</span>
+  <button id="refresh-btn" onclick="manualRefresh()">↻ refresh</button>
+</div>
+
+<!-- Handoff modal -->
+<div class="modal-backdrop" id="handoff-modal">
+  <div class="modal">
+    <h3>Handoff to worktree</h3>
+    <div class="field">
+      <label for="handoff-branch">Branch</label>
+      <input id="handoff-branch" type="text" placeholder="feature/my-branch" />
+    </div>
+    <div class="err" id="handoff-err"></div>
+    <div class="actions">
+      <button class="btn" id="handoff-cancel">Cancel</button>
+      <button class="btn primary" id="handoff-submit">Create worktree</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm create branch -->
+<div class="modal-backdrop" id="confirm-modal">
+  <div class="modal">
+    <h3>Create branch?</h3>
+    <p id="confirm-text" style="font-size:11px;color:var(--muted);line-height:1.6"></p>
+    <div class="actions">
+      <button class="btn" id="confirm-cancel">Cancel</button>
+      <button class="btn primary" id="confirm-submit">Create branch</button>
+    </div>
+  </div>
+</div>
+
+<!-- Commit / push modal -->
+<div class="modal-backdrop" id="commit-modal">
+  <div class="modal">
+    <h3 id="commit-title">Commit or push</h3>
+    <div class="field" id="commit-message-field">
+      <label for="commit-message">Commit message</label>
+      <textarea id="commit-message" placeholder="Describe your changes"></textarea>
+    </div>
+    <div class="err" id="commit-err"></div>
+    <div class="actions">
+      <button class="btn" id="commit-cancel">Cancel</button>
+      <button class="btn primary" id="commit-submit">Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function manualRefresh() {
+    window.__refresh?.();
+    const el = document.getElementById('last-refresh');
+    if (el) el.textContent = 'updated ' + new Date().toLocaleTimeString();
+  }
+</script>
+<script src="app.js"></script>
+</body>
+</html>

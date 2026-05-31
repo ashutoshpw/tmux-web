@@ -1,6 +1,6 @@
 {
-  "name": "@tmux-web/ext-github-actions",
-  "version": "0.0.1",
+  "name": "@tmux-web/ext-git-workflow",
+  "version": "0.1.0",
   "type": "module",
   "files": [
     "dist/",

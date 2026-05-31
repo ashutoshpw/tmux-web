@@ -1,0 +1,13 @@
+{
+  "name": "Git Workflow",
+  "icon": "⎇",
+  "slot": "sidebar",
+  "permissions": [],
+  "views": [
+    { "entry": "index.html" }
+  ],
+  "start": "node dist/backend/server.js",
+  "config": {
+    "pollIntervalMs": 10000
+  }
+}

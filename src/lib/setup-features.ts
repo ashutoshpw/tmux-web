@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 export const GITHUB_ACTIONS_PKG = '@tmux-web/ext-github-actions';
+export const GIT_WORKFLOW_PKG = '@tmux-web/ext-git-workflow';
 
 export type SetupFeature = {
   id: string;
@@ -65,6 +66,19 @@ export const SETUP_FEATURES: SetupFeature[] = [
     },
     async disable() {
       await cmdRemove(GITHUB_ACTIONS_PKG);
+    },
+  },
+  {
+    id: 'git-workflow',
+    label: 'Git Workflow extension',
+    description: 'sidebar git status, worktree handoff, commit/push (GitHub repos via gh CLI)',
+    kind: 'extension',
+    isEnabled: (cfg) => (cfg.plugins ?? []).includes(GIT_WORKFLOW_PKG),
+    async enable() {
+      await cmdAdd(GIT_WORKFLOW_PKG);
+    },
+    async disable() {
+      await cmdRemove(GIT_WORKFLOW_PKG);
     },
   },
 ];

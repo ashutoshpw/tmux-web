@@ -81,7 +81,7 @@ function ghNotFoundMessage(err: NodeJS.ErrnoException): GhApiResult | null {
   return null;
 }
 
-async function runGh(args: string[], input?: string): Promise<{ stdout: string; stderr: string }> {
+export async function runGh(args: string[], input?: string): Promise<{ stdout: string; stderr: string }> {
   const options: ExecFileOptions & { input?: string } = {
     env: ghEnv(),
     maxBuffer: 10 * 1024 * 1024,

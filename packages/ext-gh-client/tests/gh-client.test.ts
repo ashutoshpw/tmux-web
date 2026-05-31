@@ -5,7 +5,7 @@ import {
   checkGhAuth,
   ghApi,
   parseGhIncludeOutput,
-} from '../extensions/github-actions/backend/gh-client.js';
+} from '../src/gh-client.js';
 
 const originalEnv = { ...process.env };
 

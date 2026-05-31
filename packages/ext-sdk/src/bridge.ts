@@ -2,21 +2,21 @@ import type { ExtContext, ExtMessage } from './types.js';
 
 type ContextCallback = (ctx: ExtContext) => void;
 type ConfigCallback  = (cfg: unknown) => void | Promise<void>;
+type VoidCallback    = () => void | Promise<void>;
 
 export class ExtBridge {
   private readonly extId: string;
   private contextCb: ContextCallback | null = null;
   private configCb:  ConfigCallback  | null = null;
+  private openCb:    VoidCallback    | null = null;
+  private closeCb:   VoidCallback    | null = null;
   private _config:   unknown = null;
 
   constructor() {
-    // The iframe URL is `/ext/<id>/ui/...` — the host already knows our id,
-    // so we read it back from our own location instead of hardcoding.
     const m = window.location.pathname.match(/^\/ext\/([^/]+)\//);
     if (!m) throw new Error('[ext-sdk] cannot detect extension id from iframe URL');
     this.extId = m[1];
     window.addEventListener('message', this._onMessage.bind(this));
-    // Signal to the parent that the iframe is ready to receive config
     window.parent.postMessage({ type: 'ext:ready' } satisfies ExtMessage, '*');
   }
 
@@ -29,6 +29,10 @@ export class ExtBridge {
     } else if (msg.type === 'ext:config') {
       this._config = msg.config;
       if (this.configCb) this.configCb(msg.config);
+    } else if (msg.type === 'ext:open' && this.openCb) {
+      void this.openCb();
+    } else if (msg.type === 'ext:close' && this.closeCb) {
+      void this.closeCb();
     }
   }
 
@@ -38,6 +42,14 @@ export class ExtBridge {
 
   onConfig(cb: ConfigCallback): void {
     this.configCb = cb;
+  }
+
+  onOpen(cb: VoidCallback): void {
+    this.openCb = cb;
+  }
+
+  onClose(cb: VoidCallback): void {
+    this.closeCb = cb;
   }
 
   getConfig(): unknown {

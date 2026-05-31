@@ -78,13 +78,19 @@ ${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)
   const toggle   = document.getElementById('ext-${id}-toggle');
   const close    = document.getElementById('ext-${id}-close');
 
+  function notifyFrame(type) {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type }, '*');
+  }
+
   function openDrawer() {
     drawer.classList.add('open');
     backdrop.classList.add('open');
+    notifyFrame('ext:open');
   }
   function closeDrawer() {
     drawer.classList.remove('open');
     backdrop.classList.remove('open');
+    notifyFrame('ext:close');
   }
 
   toggle.addEventListener('click', () => {

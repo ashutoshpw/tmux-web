@@ -3,11 +3,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "declaration": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "rootDir": "backend",
-    "outDir": "dist/backend"
+    "lib": ["ES2022", "DOM"],
+    "rootDir": "src",
+    "outDir": "dist"
   },
-  "include": ["backend"]
+  "include": ["src"]
 }

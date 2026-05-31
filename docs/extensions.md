@@ -15,7 +15,7 @@ tmux-web ships a small core. Anything beyond the terminal — GitHub Actions sta
 tmux-web setup
 ```
 
-Walks through optional features: command bar and GitHub Actions extension. When enabling GitHub Actions, setup checks `gh auth status` and prints instructions if you are not logged in.
+Walks through optional features: command bar, GitHub Actions, and Git Workflow extensions. When either GitHub extension is enabled, setup checks `gh auth status` and prints instructions if you are not logged in. No `GITHUB_PAT` or `.env` token is required for normal local use — `gh auth login` is enough.
 
 Non-interactive:
 
@@ -60,11 +60,13 @@ tmux-web remove @tmux-web/ext-github-actions
 
 Extensions inherit the env of the `tmux-web` process. **tmux-web loads `~/.tmux-web/.env` automatically** on every start (dev mode uses `~/.dev/.tmux-web/.env`). Variables already set in your shell are not overwritten.
 
-The GitHub Actions extension calls GitHub through **`gh api`**, so you need the [GitHub CLI](https://cli.github.com/) installed and on your `PATH`. Authenticate locally with:
+The GitHub Actions and Git Workflow extensions call GitHub through **`gh api`** / **`gh repo view`**, so you need the [GitHub CLI](https://cli.github.com/) installed and on your `PATH`. Authenticate locally with:
 
 ```bash
 gh auth login
 ```
+
+No `~/.tmux-web/.env` token is required for normal interactive use on your machine.
 
 For headless or systemd deployments where interactive login is not possible, set a token in `~/.tmux-web/.env` instead (`gh` honors `GH_TOKEN`; `GITHUB_PAT` is also passed through as `GH_TOKEN`):
 

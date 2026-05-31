@@ -124,8 +124,9 @@ export async function cmdSetup(argv: string[]): Promise<void> {
     console.log(`✓ terminal renderer set to ${rendererChoice}`);
   }
 
-  const githubOn = selections.get('github-actions') === true;
-  if (githubOn) {
+  const githubExtOn = selections.get('github-actions') === true
+    || selections.get('git-workflow') === true;
+  if (githubExtOn) {
     await verifyGithubCliAuth();
   }
 

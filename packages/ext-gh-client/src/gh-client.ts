@@ -1,12 +1,13 @@
-import { execFile as nodeExecFile, type ExecFileOptions } from 'node:child_process';
+import { spawn as nodeSpawn, type SpawnOptionsWithoutStdio } from 'node:child_process';
 
-type ExecFileFn = typeof nodeExecFile;
+type SpawnFn = typeof nodeSpawn;
+type GhProcessError = NodeJS.ErrnoException & { stdout?: string; stderr?: string };
 
-let execFileImpl: ExecFileFn = nodeExecFile;
+let spawnImpl: SpawnFn = nodeSpawn;
 
 /** @internal test hook */
-export function __setExecFileForTests(fn: ExecFileFn | null): void {
-  execFileImpl = fn ?? nodeExecFile;
+export function __setExecFileForTests(fn: SpawnFn | null): void {
+  spawnImpl = fn ?? nodeSpawn;
 }
 
 export type GhApiResult = { status: number; body: unknown };
@@ -82,22 +83,59 @@ function ghNotFoundMessage(err: NodeJS.ErrnoException): GhApiResult | null {
 }
 
 export async function runGh(args: string[], input?: string): Promise<{ stdout: string; stderr: string }> {
-  const options: ExecFileOptions & { input?: string } = {
+  const options: SpawnOptionsWithoutStdio = {
     env: ghEnv(),
-    maxBuffer: 10 * 1024 * 1024,
   };
-  if (input !== undefined) {
-    options.input = input;
-  }
 
   return new Promise((resolve, reject) => {
-    execFileImpl('gh', args, options, (err, stdout, stderr) => {
-      if (err) reject(err);
-      else resolve({
-        stdout: stdout == null ? '' : String(stdout),
-        stderr: stderr == null ? '' : String(stderr),
-      });
+    const child = spawnImpl('gh', args, options);
+    const maxBuffer = 10 * 1024 * 1024;
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    function finishWithError(err: GhProcessError): void {
+      if (settled) return;
+      settled = true;
+      err.stdout = stdout;
+      err.stderr = stderr;
+      reject(err);
+    }
+
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      stdout += String(chunk);
+      if (stdout.length + stderr.length > maxBuffer) {
+        child.kill();
+        finishWithError(Object.assign(new Error('gh output exceeded max buffer'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }));
+      }
     });
+
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      stderr += String(chunk);
+      if (stdout.length + stderr.length > maxBuffer) {
+        child.kill();
+        finishWithError(Object.assign(new Error('gh output exceeded max buffer'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }));
+      }
+    });
+
+    child.on('error', (err: NodeJS.ErrnoException) => finishWithError(err));
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      if (code && code !== 0) {
+        const err = Object.assign(new Error(`gh exited with code ${code}`), {
+          code,
+          stdout,
+          stderr,
+        });
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+
+    child.stdin.end(input);
   });
 }
 

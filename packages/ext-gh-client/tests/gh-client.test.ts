@@ -1,4 +1,6 @@
-import { execFile, type ExecFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   __setExecFileForTests,
@@ -9,22 +11,47 @@ import {
 
 const originalEnv = { ...process.env };
 
-function createExecFileMock() {
-  return vi.fn<ExecFile>();
+function createSpawnMock() {
+  return vi.fn<typeof spawn>();
 }
 
-function mockExecSuccess(mock: ReturnType<typeof createExecFileMock>, stdout: string, stderr = '') {
-  mock.mockImplementation((_file, _args, _options, callback) => {
-    callback?.(null, stdout, stderr);
+function createChild(stdout: string, stderr: string, code: number | null, error?: NodeJS.ErrnoException) {
+  const child = new EventEmitter() as ReturnType<typeof spawn> & { stdinInput: string };
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.stdinInput = '';
+  child.kill = vi.fn() as unknown as ReturnType<typeof spawn>['kill'];
+  child.stdin.on('data', (chunk) => {
+    child.stdinInput += String(chunk);
   });
+
+  queueMicrotask(() => {
+    if (error) {
+      child.emit('error', error);
+      return;
+    }
+    if (stdout) child.stdout.write(stdout);
+    if (stderr) child.stderr.write(stderr);
+    child.emit('close', code);
+  });
+
+  return child;
 }
 
-function mockExecFailure(
-  mock: ReturnType<typeof createExecFileMock>,
+function mockSpawnSuccess(mock: ReturnType<typeof createSpawnMock>, stdout: string, stderr = '') {
+  mock.mockImplementation(() => createChild(stdout, stderr, 0));
+}
+
+function mockSpawnFailure(
+  mock: ReturnType<typeof createSpawnMock>,
   err: NodeJS.ErrnoException & { stdout?: string; stderr?: string },
 ) {
-  mock.mockImplementation((_file, _args, _options, callback) => {
-    callback?.(err, err.stdout ?? '', err.stderr ?? '');
+  mock.mockImplementation(() => {
+    if (err.code === 'ENOENT') {
+      return createChild('', '', null, err);
+    }
+    return createChild(err.stdout ?? '', err.stderr ?? '', Number(err.code) || 1);
   });
 }
 
@@ -69,54 +96,54 @@ describe('parseGhIncludeOutput', () => {
 });
 
 describe('ghApi', () => {
-  let execFileMock: ReturnType<typeof createExecFileMock>;
+  let spawnMock: ReturnType<typeof createSpawnMock>;
 
   beforeEach(() => {
-    execFileMock = createExecFileMock();
-    __setExecFileForTests(execFileMock as unknown as typeof execFile);
+    spawnMock = createSpawnMock();
+    __setExecFileForTests(spawnMock);
     delete process.env.GITHUB_PAT;
     delete process.env.GH_TOKEN;
     delete process.env.GITHUB_TOKEN;
   });
 
   it('calls gh api with --include for GET requests', async () => {
-    mockExecSuccess(execFileMock, 'HTTP/2.0 200 OK\n\n{"total_count":0}');
+    mockSpawnSuccess(spawnMock, 'HTTP/2.0 200 OK\n\n{"total_count":0}');
 
     const result = await ghApi('repos/o/r/actions/runs/1');
 
-    expect(execFileMock).toHaveBeenCalledWith(
+    expect(spawnMock).toHaveBeenCalledWith(
       'gh',
       ['api', '--include', 'repos/o/r/actions/runs/1'],
       expect.objectContaining({ env: expect.any(Object) }),
-      expect.any(Function),
     );
     expect(result).toEqual({ status: 200, body: { total_count: 0 } });
   });
 
   it('calls gh api with POST method and JSON body', async () => {
-    mockExecSuccess(execFileMock, 'HTTP/2.0 204 No Content\n\n');
+    mockSpawnSuccess(spawnMock, 'HTTP/2.0 204 No Content\n\n');
 
     const result = await ghApi('repos/o/r/actions/workflows/ci.yml/dispatches', {
       method: 'POST',
       body: { ref: 'main' },
     });
 
-    expect(execFileMock).toHaveBeenCalledWith(
+    expect(spawnMock).toHaveBeenCalledWith(
       'gh',
       ['api', '--include', 'repos/o/r/actions/workflows/ci.yml/dispatches', '-X', 'POST', '--input', '-'],
-      expect.objectContaining({ input: '{"ref":"main"}' }),
-      expect.any(Function),
+      expect.objectContaining({ env: expect.any(Object) }),
     );
+    const child = spawnMock.mock.results[0]?.value as ReturnType<typeof createChild>;
+    expect(child.stdinInput).toBe('{"ref":"main"}');
     expect(result).toEqual({ status: 204, body: null });
   });
 
   it('maps GITHUB_PAT to GH_TOKEN in subprocess env', async () => {
     process.env.GITHUB_PAT = 'pat_test';
-    mockExecSuccess(execFileMock, 'HTTP/2.0 200 OK\n\n{}');
+    mockSpawnSuccess(spawnMock, 'HTTP/2.0 200 OK\n\n{}');
 
     await ghApi('repos/o/r/actions/runs/1');
 
-    const call = execFileMock.mock.calls[0];
+    const call = spawnMock.mock.calls[0];
     const options = call[2] as { env: NodeJS.ProcessEnv };
     expect(options.env.GH_TOKEN).toBe('pat_test');
   });
@@ -124,18 +151,18 @@ describe('ghApi', () => {
   it('does not override existing GH_TOKEN with GITHUB_PAT', async () => {
     process.env.GITHUB_PAT = 'pat_test';
     process.env.GH_TOKEN = 'token_existing';
-    mockExecSuccess(execFileMock, 'HTTP/2.0 200 OK\n\n{}');
+    mockSpawnSuccess(spawnMock, 'HTTP/2.0 200 OK\n\n{}');
 
     await ghApi('repos/o/r/actions/runs/1');
 
-    const call = execFileMock.mock.calls[0];
+    const call = spawnMock.mock.calls[0];
     const options = call[2] as { env: NodeJS.ProcessEnv };
     expect(options.env.GH_TOKEN).toBe('token_existing');
   });
 
   it('returns 503 when gh is not found', async () => {
     const err = Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' });
-    mockExecFailure(execFileMock, err);
+    mockSpawnFailure(spawnMock, err);
 
     const result = await ghApi('repos/o/r/actions/runs/1');
 
@@ -150,7 +177,7 @@ describe('ghApi', () => {
       code: 1,
       stderr: 'To use GitHub CLI, please run: gh auth login',
     });
-    mockExecFailure(execFileMock, err);
+    mockSpawnFailure(spawnMock, err);
 
     const result = await ghApi('repos/o/r/actions/runs/1');
 
@@ -162,38 +189,37 @@ describe('ghApi', () => {
 });
 
 describe('checkGhAuth', () => {
-  let execFileMock: ReturnType<typeof createExecFileMock>;
+  let spawnMock: ReturnType<typeof createSpawnMock>;
 
   beforeEach(() => {
-    execFileMock = createExecFileMock();
-    __setExecFileForTests(execFileMock as unknown as typeof execFile);
+    spawnMock = createSpawnMock();
+    __setExecFileForTests(spawnMock);
     delete process.env.GITHUB_PAT;
     delete process.env.GH_TOKEN;
     delete process.env.GITHUB_TOKEN;
   });
 
   it('returns ok when gh auth status succeeds', async () => {
-    mockExecSuccess(execFileMock, 'github.com\n  ✓ Logged in to github.com\n');
+    mockSpawnSuccess(spawnMock, 'github.com\n  ✓ Logged in to github.com\n');
 
     await expect(checkGhAuth()).resolves.toEqual({ ok: true });
-    expect(execFileMock).toHaveBeenCalledWith(
+    expect(spawnMock).toHaveBeenCalledWith(
       'gh',
       ['auth', 'status'],
       expect.any(Object),
-      expect.any(Function),
     );
   });
 
   it('returns ok when a token env var is set', async () => {
     process.env.GITHUB_PAT = 'pat_test';
-    mockExecFailure(execFileMock, Object.assign(new Error('not logged in'), { code: 1, stderr: 'not logged in' }));
+    mockSpawnFailure(spawnMock, Object.assign(new Error('not logged in'), { code: 1, stderr: 'not logged in' }));
 
     await expect(checkGhAuth()).resolves.toEqual({ ok: true });
   });
 
   it('returns failure when gh is missing and no token is configured', async () => {
     const err = Object.assign(new Error('spawn gh ENOENT'), { code: 'ENOENT' });
-    mockExecFailure(execFileMock, err);
+    mockSpawnFailure(spawnMock, err);
 
     const result = await checkGhAuth();
     expect(result.ok).toBe(false);

@@ -18,6 +18,10 @@
     "@tmux-web/ext-sdk": "file:../../packages/ext-sdk",
     "hono": "^4.7.0"
   },
+  "bundledDependencies": [
+    "@tmux-web/ext-gh-client",
+    "@tmux-web/ext-sdk"
+  ],
   "devDependencies": {
     "@types/node": "^25.8.0",
     "esbuild": "^0.24.0",

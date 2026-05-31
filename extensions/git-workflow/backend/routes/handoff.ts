@@ -1,6 +1,16 @@
 import { Hono } from 'hono';
 import { ghRepoView } from '@tmux-web/ext-gh-client';
-import { branchExists, createWorktree, ensureLocalBranch, pickUniqueWorktreePath, repoRoot, resolveMainRepoPath } from '../git.js';
+import path from 'node:path';
+import {
+  branchExists,
+  buildHandoffBranchName,
+  createWorktree,
+  ensureLocalBranch,
+  isBranchCheckedOut,
+  pickUniqueWorktreePath,
+  repoRoot,
+  resolveMainRepoPath,
+} from '../git.js';
 import { isPaneReady, paneNotReadyReason } from '../pane-ready.js';
 import { capturePaneTail, getActivePaneInfo, sendKeysToPane } from '../tmux.js';
 import { fetchSessionStatus } from '../status-service.js';
@@ -45,11 +55,21 @@ handoffRouter.post('/handoff', async (c) => {
     return c.json({ error: String((err as Error).message) }, 500);
   }
 
+  let targetBranch = branch;
   try {
     if (exists.exists && exists.source === 'remote') {
       ensureLocalBranch(mainRepoRoot, branch);
     }
-    createWorktree(mainRepoRoot, worktreePath, branch, !exists.exists);
+
+    let createBranch = !exists.exists;
+    let startPoint: string | undefined;
+    if (exists.exists && isBranchCheckedOut(mainRepoRoot, branch)) {
+      targetBranch = buildHandoffBranchName(branch, path.basename(worktreePath));
+      createBranch = true;
+      startPoint = branch;
+    }
+
+    createWorktree(mainRepoRoot, worktreePath, targetBranch, createBranch, startPoint);
   } catch (err) {
     return c.json({ error: `git worktree add failed: ${(err as Error).message}` }, 500);
   }
@@ -76,7 +96,8 @@ handoffRouter.post('/handoff', async (c) => {
   return c.json({
     worktreePath,
     mainRepoPath: mainRepoRoot,
-    branch,
+    requestedBranch: branch,
+    branch: targetBranch,
     cdApplied,
     cdSkippedReason,
     status,

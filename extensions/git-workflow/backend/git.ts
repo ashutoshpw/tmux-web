@@ -59,6 +59,29 @@ export function resolveMainRepoPath(repoRootPath: string): string | null {
   return repoRootPath;
 }
 
+export function parseCheckedOutBranches(worktreeListPorcelain: string): Set<string> {
+  const branches = new Set<string>();
+  for (const line of worktreeListPorcelain.split('\n')) {
+    if (!line.startsWith('branch ')) continue;
+    const ref = line.slice('branch '.length).trim();
+    if (ref.startsWith('refs/heads/')) {
+      branches.add(ref.slice('refs/heads/'.length));
+    }
+  }
+  return branches;
+}
+
+export function isBranchCheckedOut(repoRootPath: string, branch: string): boolean {
+  const trimmed = branch.trim();
+  if (!trimmed) return false;
+
+  try {
+    return parseCheckedOutBranches(git(['worktree', 'list', '--porcelain'], repoRootPath)).has(trimmed);
+  } catch {
+    return false;
+  }
+}
+
 export interface GitStatusInfo {
   branch: string;
   dirty: boolean;
@@ -164,10 +187,13 @@ export function createWorktree(
   worktreePath: string,
   branch: string,
   createBranch: boolean,
+  startPoint?: string,
 ): void {
   mkdirSync(path.dirname(worktreePath), { recursive: true });
   if (createBranch) {
-    execFileSync('git', ['worktree', 'add', '-b', branch, worktreePath], {
+    const args = ['worktree', 'add', '-b', branch, worktreePath];
+    if (startPoint) args.push(startPoint);
+    execFileSync('git', args, {
       cwd: mainRepoRoot,
       encoding: 'utf-8',
       timeout: GIT_TIMEOUT_MS,
@@ -179,6 +205,10 @@ export function createWorktree(
       timeout: GIT_TIMEOUT_MS,
     });
   }
+}
+
+export function buildHandoffBranchName(sourceBranch: string, id: string): string {
+  return `tmux-web/${sourceBranch}/${id}`;
 }
 
 export function pickUniqueWorktreePath(org: string, repo: string): string {

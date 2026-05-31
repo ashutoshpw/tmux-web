@@ -242,7 +242,7 @@ async function fetchStatus() {
     }
 
     if (_displayedPaneId && res.paneId !== _displayedPaneId) {
-      // Window/pane switched — full re-render
+      _pendingHandoffBranch = '';
     }
 
     renderPanel(res.data);

@@ -85,7 +85,7 @@ handoffRouter.post('/handoff', async (c) => {
   let cdSkippedReason: string | undefined;
 
   if (paneReady) {
-    sendKeysToPane(pane.target, `cd ${worktreePath}`);
+    sendKeysToPane(pane.target, `cd '${worktreePath.replace(/'/g, "'\\''")}'`);
     cdApplied = true;
   } else {
     cdSkippedReason = paneNotReadyReason(readyInput);

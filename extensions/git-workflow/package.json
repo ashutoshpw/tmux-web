@@ -1,7 +1,17 @@
 {
   "name": "@tmux-web/ext-git-workflow",
   "version": "0.1.0",
+  "description": "Git workflow sidebar extension for tmux-web",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ashutoshpw/tmux-web",
+    "directory": "extensions/git-workflow"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist/",
     "tmux-extension.json"

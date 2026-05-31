@@ -1,28 +1,8 @@
 import { Hono } from 'hono';
+import { ghApi } from '../gh-client.js';
 import { parseWorkflowUrl } from './workflows.js';
 
 export const runsRouter = new Hono();
-
-const GH_BASE = 'https://api.github.com';
-const GITHUB_PAT = process.env.GITHUB_PAT ?? "";
-
-function ghHeaders() {
-  return {
-    Authorization:          `Bearer ${GITHUB_PAT}`,
-    Accept:                 'application/vnd.github+json',
-    'X-GitHub-Api-Version': '2022-11-28',
-    'User-Agent':           'tmux-web-github-actions-ext/0.1',
-  };
-}
-
-async function ghFetch(path: string, options?: RequestInit) {
-  const res = await fetch(`${GH_BASE}${path}`, {
-    ...options,
-    headers: { ...ghHeaders(), ...(options?.headers ?? {}) },
-  });
-  const body = res.status === 204 ? null : await res.json();
-  return { status: res.status, body };
-}
 
 // ─── GET /runs ────────────────────────────────────────────────────────────────
 runsRouter.get('/runs', async (c) => {
@@ -49,8 +29,8 @@ runsRouter.get('/runs', async (c) => {
     ...(branch ? { branch } : {}),
   });
 
-  const { status, body } = await ghFetch(
-    `/repos/${repo}/actions/workflows/${encodeURIComponent(workflow)}/runs?${params}`,
+  const { status, body } = await ghApi(
+    `repos/${repo}/actions/workflows/${encodeURIComponent(workflow)}/runs?${params}`,
   );
   return c.json(body, status as any);
 });
@@ -62,7 +42,7 @@ runsRouter.get('/runs/:runId', async (c) => {
 
   if (!repo) return c.json({ error: '`repo` is required' }, 400);
 
-  const { status, body } = await ghFetch(`/repos/${repo}/actions/runs/${runId}`);
+  const { status, body } = await ghApi(`repos/${repo}/actions/runs/${runId}`);
   return c.json(body, status as any);
 });
 
@@ -73,8 +53,8 @@ runsRouter.get('/runs/:runId/jobs', async (c) => {
 
   if (!repo) return c.json({ error: '`repo` is required' }, 400);
 
-  const { status, body } = await ghFetch(
-    `/repos/${repo}/actions/runs/${runId}/jobs?filter=latest`,
+  const { status, body } = await ghApi(
+    `repos/${repo}/actions/runs/${runId}/jobs?filter=latest`,
   );
   return c.json(body, status as any);
 });
@@ -86,8 +66,8 @@ runsRouter.post('/runs/:runId/rerun', async (c) => {
 
   if (!repo) return c.json({ error: '`repo` is required in body' }, 400);
 
-  const { status, body } = await ghFetch(
-    `/repos/${repo}/actions/runs/${runId}/rerun`,
+  const { status, body } = await ghApi(
+    `repos/${repo}/actions/runs/${runId}/rerun`,
     { method: 'POST' },
   );
 
@@ -102,8 +82,8 @@ runsRouter.post('/runs/:runId/rerun-failed', async (c) => {
 
   if (!repo) return c.json({ error: '`repo` is required in body' }, 400);
 
-  const { status, body } = await ghFetch(
-    `/repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`,
+  const { status, body } = await ghApi(
+    `repos/${repo}/actions/runs/${runId}/rerun-failed-jobs`,
     { method: 'POST' },
   );
 
@@ -118,8 +98,8 @@ runsRouter.delete('/runs/:runId', async (c) => {
 
   if (!repo) return c.json({ error: '`repo` is required' }, 400);
 
-  const { status, body } = await ghFetch(
-    `/repos/${repo}/actions/runs/${runId}/cancel`,
+  const { status, body } = await ghApi(
+    `repos/${repo}/actions/runs/${runId}/cancel`,
     { method: 'POST' },
   );
 

@@ -15,7 +15,7 @@ tmux-web ships a small core. Anything beyond the terminal — GitHub Actions sta
 tmux-web setup
 ```
 
-Walks through optional features: command bar, GitHub Actions extension, and an optional `GITHUB_PAT` saved to `~/.tmux-web/.env`.
+Walks through optional features: command bar and GitHub Actions extension. When enabling GitHub Actions, setup checks `gh auth status` and prints instructions if you are not logged in.
 
 Non-interactive:
 
@@ -60,11 +60,17 @@ tmux-web remove @tmux-web/ext-github-actions
 
 Extensions inherit the env of the `tmux-web` process. **tmux-web loads `~/.tmux-web/.env` automatically** on every start (dev mode uses `~/.dev/.tmux-web/.env`). Variables already set in your shell are not overwritten.
 
-Create or update the file manually, or use `tmux-web setup` to save `GITHUB_PAT`:
+The GitHub Actions extension calls GitHub through **`gh api`**, so you need the [GitHub CLI](https://cli.github.com/) installed and on your `PATH`. Authenticate locally with:
+
+```bash
+gh auth login
+```
+
+For headless or systemd deployments where interactive login is not possible, set a token in `~/.tmux-web/.env` instead (`gh` honors `GH_TOKEN`; `GITHUB_PAT` is also passed through as `GH_TOKEN`):
 
 ```bash
 cat > ~/.tmux-web/.env <<'EOF'
-GITHUB_PAT=github_pat_xxx
+GH_TOKEN=github_pat_xxx
 PORT=9878
 EOF
 chmod 600 ~/.tmux-web/.env
@@ -72,7 +78,7 @@ chmod 600 ~/.tmux-web/.env
 tmux-web
 ```
 
-For a systemd service, use `EnvironmentFile=/home/youruser/.tmux-web/.env` (same path tmux-web reads by default).
+For a systemd service, use `EnvironmentFile=/home/youruser/.tmux-web/.env` (same path tmux-web reads by default). The service user must either have run `gh auth login` or have `GH_TOKEN`/`GITHUB_PAT` set in that file.
 
 ---
 

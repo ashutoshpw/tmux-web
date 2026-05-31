@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { ghApi } from '@tmux-web/ext-gh-client';
+import { ghApi } from '@tmux-web/ext-gh-workflow';
 import { parseWorkflowUrl } from './workflows.js';
 
 export const runsRouter = new Hono();

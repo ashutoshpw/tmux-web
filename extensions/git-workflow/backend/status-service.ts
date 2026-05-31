@@ -1,4 +1,4 @@
-import { ghRepoView } from '@tmux-web/ext-gh-client';
+import { ghRepoView } from '@tmux-web/ext-gh-workflow';
 import { capturePaneTail, getActivePaneInfo, type ActivePaneInfo } from './tmux.js';
 import { isPaneReady } from './pane-ready.js';
 import {

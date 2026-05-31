@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { ghRepoView } from '@tmux-web/ext-gh-client';
+import { ghRepoView } from '@tmux-web/ext-gh-workflow';
 import path from 'node:path';
 import {
   branchExists,

@@ -14,12 +14,12 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.0",
-    "@tmux-web/ext-gh-client": "file:../../packages/ext-gh-client",
+    "@tmux-web/ext-gh-workflow": "file:../../packages/ext-gh-workflow",
     "@tmux-web/ext-sdk": "file:../../packages/ext-sdk",
     "hono": "^4.7.0"
   },
   "bundledDependencies": [
-    "@tmux-web/ext-gh-client",
+    "@tmux-web/ext-gh-workflow",
     "@tmux-web/ext-sdk"
   ],
   "devDependencies": {

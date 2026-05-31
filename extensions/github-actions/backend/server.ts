@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { serve, createAdaptorServer } from '@hono/node-server';
 import { unlinkSync } from 'node:fs';
-import { checkGhAuth } from '@tmux-web/ext-gh-client';
+import { checkGhAuth } from '@tmux-web/ext-gh-workflow';
 import { runsRouter } from './routes/runs.js';
 import { dispatchRouter } from './routes/dispatch.js';
 import { workflowsRouter } from './routes/workflows.js';

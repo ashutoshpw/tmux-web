@@ -1,5 +1,5 @@
 {
-  "name": "@tmux-web/ext-gh-client",
+  "name": "@tmux-web/ext-gh-workflow",
   "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",

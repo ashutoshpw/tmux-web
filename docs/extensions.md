@@ -289,28 +289,8 @@ Users install via:
 tmux-web add @yourscope/your-extension
 ```
 
-### Git Workflow (`@tmux-web/ext-git-workflow`)
+### Bundled extensions
 
-Sidebar extension for GitHub-linked repositories. Shows git status for the **active tmux pane** when you open the drawer, polls every 10 seconds while the drawer stays open, and refreshes automatically when you switch tmux windows.
-
-**Requirements:**
-
-- A git repository with a GitHub remote (detected via `gh repo view`)
-- GitHub CLI authenticated (`gh auth login`) — same as the GitHub Actions extension
-
-**Features:**
-
-| Feature | Description |
+| Extension | Guide |
 | --- | --- |
-| Environment panel | Branch, change counts (+/−), Local vs Worktree badge |
-| Handoff to worktree | Creates `~/.worktrees/<org>/<repo>/<8-char-id>/` and `cd`s into it when the pane shell is idle |
-| Commit or push | Commits with a message when dirty, pushes when ahead of upstream |
-| Worktree view | Shows the main repository path (copyable) |
-
-Enable via setup or manually:
-
-```bash
-tmux-web add @tmux-web/ext-git-workflow
-```
-
-**Drawer lifecycle:** The host sends `ext:open` / `ext:close` postMessages when the sidebar opens or closes. Extensions use `ext.onOpen()` / `ext.onClose()` from `@tmux-web/ext-sdk` to fetch data on open and stop polling on close.
+| `@tmux-web/ext-git-workflow` | [Git Workflow](extensions/git-workflow.md) — git status, worktree handoff, commit/push |

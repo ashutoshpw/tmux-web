@@ -52,6 +52,7 @@ The terminal renderer defaults to xterm.js. Start with `--ghostty` or set `TMUX_
 - [Scheduler](docs/scheduler.md) — delayed `send-keys` tasks
 - **Windows drawer** — switch tmux windows from the terminal header (mobile-friendly tab picker)
 - [Extensions](docs/extensions.md) — install, configure, and build sidebar plugins
+- [Git Workflow](docs/extensions/git-workflow.md) — git status, worktree handoff, commit/push
 - [Architecture](docs/architecture.md) — how the server, terminal, and extensions connect
 
 ## Prerequisites

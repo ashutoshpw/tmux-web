@@ -36,6 +36,12 @@ export interface SessionAccessRecord {
 	lastAccessedAt: number; // ms timestamp
 }
 
+export interface PinnedViewRecord {
+	sessionName: string;
+	windowIndex?: number; // omitted = session-level pin
+	pinnedAt: number;
+}
+
 export interface WatchedPaneRecord {
 	paneId: string;        // stable tmux pane id, e.g. "%5"
 	sessionName: string;
@@ -49,6 +55,7 @@ export interface DbSchema {
 	scheduledTasks: StoredTask[];
 	triggeredTasks: TriggeredTaskRecord[];
 	sessionAccess: SessionAccessRecord[];
+	pinnedViews: PinnedViewRecord[];
 	watchedPanes: WatchedPaneRecord[];
 }
 
@@ -57,5 +64,5 @@ mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(
 	new JSONFile<DbSchema>(join(dbDir, 'db.json')),
-	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], watchedPanes: [] },
+	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], pinnedViews: [], watchedPanes: [] },
 );

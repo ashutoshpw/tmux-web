@@ -5,6 +5,7 @@
 import { notesDrawerScript } from '../src/lib/notes-drawer.js';
 import { schedulerDrawerScript } from '../src/lib/scheduler-drawer.js';
 import { windowsDrawerScript } from '../src/lib/windows-drawer.js';
+import { sessionsDrawerScript } from '../src/lib/sessions-drawer.js';
 
 const SESSION = '__drawer_check__';
 
@@ -23,6 +24,7 @@ const combined = [
 	notesDrawerScript(`session:${SESSION}`),
 	schedulerDrawerScript(SESSION),
 	windowsDrawerScript(SESSION),
+	sessionsDrawerScript(SESSION),
 ].join('\n\n');
 
 assertParses('combined drawer scripts', combined);

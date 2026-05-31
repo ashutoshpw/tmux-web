@@ -38,6 +38,8 @@ import { readActiveTheme, setActiveThemeTemplate } from "./lib/theme-store.js";
 import { isThemeTemplateId } from "./lib/themes/index.js";
 import { installPlugin, uninstallPlugin } from "./lib/plugins.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
+import { pinView, unpinView, listPinnedViews } from "./lib/pinned-views.js";
+import { buildSidebarSessions } from "./lib/sessions-sidebar.js";
 import {
 	getSessionPaneTarget,
 	capturePaneTail,
@@ -161,6 +163,7 @@ const extChildren: import("node:child_process").ChildProcess[] = [];
 // retention (settings.scheduleHistoryDays) applies to the startup prune too.
 await db.read();
 db.data.sessionAccess ??= [];
+db.data.pinnedViews ??= [];
 db.data.watchedPanes ??= [];
 db.data.triggeredTasks ??= [];
 
@@ -406,6 +409,70 @@ app.post("/settings/theme", async (c) => {
 app.get("/api/sessions", (c) => {
 	if (!commandbarEnabled) return c.json({ error: "commandbar disabled" }, 404);
 	return c.json(buildCommandbarSessions(listSessions(), getSessionAccessMap()));
+});
+
+function sidebarSessionsPayload(currentSession?: string) {
+	return {
+		...buildSidebarSessions(listSessions(), getSessionAccessMap(), listPinnedViews()),
+		currentSession: currentSession ?? null,
+	};
+}
+
+function parsePinnedViewBody(body: { sessionName?: unknown; windowIndex?: unknown }) {
+	const sessionName = typeof body.sessionName === "string" ? body.sessionName.trim() : "";
+	if (!sessionName) return { error: "sessionName is required" as const };
+
+	if (body.windowIndex === undefined) {
+		return { sessionName };
+	}
+
+	const windowIndex = body.windowIndex;
+	if (
+		typeof windowIndex !== "number" ||
+		!Number.isInteger(windowIndex) ||
+		windowIndex < 0
+	) {
+		return { error: "windowIndex must be a non-negative integer" as const };
+	}
+
+	return { sessionName, windowIndex };
+}
+
+app.get("/api/sidebar/sessions", (c) => {
+	const currentSession = c.req.query("currentSession");
+	return c.json(sidebarSessionsPayload(
+		typeof currentSession === "string" && currentSession ? currentSession : undefined,
+	));
+});
+
+app.post("/api/pinned-views", async (c) => {
+	let body: { sessionName?: unknown; windowIndex?: unknown };
+	try {
+		body = await c.req.json();
+	} catch {
+		return c.json({ error: "invalid json" }, 400);
+	}
+
+	const parsed = parsePinnedViewBody(body);
+	if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+
+	await pinView(parsed.sessionName, parsed.windowIndex);
+	return c.json(sidebarSessionsPayload());
+});
+
+app.delete("/api/pinned-views", async (c) => {
+	let body: { sessionName?: unknown; windowIndex?: unknown };
+	try {
+		body = await c.req.json();
+	} catch {
+		return c.json({ error: "invalid json" }, 400);
+	}
+
+	const parsed = parsePinnedViewBody(body);
+	if ("error" in parsed) return c.json({ error: parsed.error }, 400);
+
+	await unpinView(parsed.sessionName, parsed.windowIndex);
+	return c.json(sidebarSessionsPayload());
 });
 
 // ── Notes API ──────────────────────────────────────────────────────────────

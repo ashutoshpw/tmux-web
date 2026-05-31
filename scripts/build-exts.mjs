@@ -19,7 +19,10 @@ function buildPackageDir(dir, tag) {
   }
   if (!existsSync(path.join(dir, 'node_modules')) || force) {
     console.log(`${tag} installing deps…`);
-    execFileSync('npm', ['install'], { cwd: dir, stdio: 'inherit' });
+    const installArgs = existsSync(path.join(dir, 'package-lock.json'))
+      ? ['ci']
+      : ['install'];
+    execFileSync('npm', installArgs, { cwd: dir, stdio: 'inherit' });
   }
   console.log(`${tag} building…`);
   execFileSync('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit' });

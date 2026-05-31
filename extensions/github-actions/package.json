@@ -34,7 +34,10 @@
   ],
   "devDependencies": {
     "@types/node": "^25.8.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "0.24.2",
     "typescript": "^5.7.0"
+  },
+  "overrides": {
+    "esbuild": "0.24.2"
   }
 }

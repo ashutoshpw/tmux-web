@@ -1,4 +1,4 @@
-import { ghRepoView } from '@tmux-web/ext-gh-workflow';
+import { ghRepoView, fetchPrForBranch, fetchPrChecks } from '@tmux-web/ext-gh-workflow';
 import { capturePaneTail, getActivePaneInfo, type ActivePaneInfo } from './tmux.js';
 import { isPaneReady } from './pane-ready.js';
 import {
@@ -64,12 +64,26 @@ async function buildPaneCache(session: string, pane: ActivePaneInfo): Promise<St
   const mainRepoPath = kind === 'worktree' ? resolveMainRepoPath(root) : root;
   const branchSource = mainRepoPath ?? root;
 
+  let pr = null;
+  const branch = gitStatus.branch;
+  if (branch !== 'main' && branch !== 'master') {
+    try {
+      const prBase = await fetchPrForBranch(github.nameWithOwner, branch);
+      if (prBase) {
+        const checks = await fetchPrChecks(github.nameWithOwner, prBase.headSha);
+        pr = { ...prBase, checks };
+      }
+    } catch {
+      // PR fetch is best-effort; don't fail the status response
+    }
+  }
+
   const entry: PaneCache = {
     session,
     paneId: pane.paneId,
     panePath,
     windowIndex: pane.windowIndex,
-    branch: gitStatus.branch,
+    branch,
     kind,
     mainRepoPath,
     repoRoot: root,
@@ -81,6 +95,7 @@ async function buildPaneCache(session: string, pane: ActivePaneInfo): Promise<St
     branches: listBranchNames(branchSource),
     paneReady,
     fetchedAt: Date.now(),
+    pr,
   };
 
   const key = cacheKey(session, pane.paneId, panePath);

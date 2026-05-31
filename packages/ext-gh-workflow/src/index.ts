@@ -13,3 +13,10 @@ export {
   ghRepoViewFromDir,
   type GhRepoInfo,
 } from './gh-repo.js';
+
+export {
+  fetchPrForBranch,
+  fetchPrChecks,
+  type PrCheck,
+  type PrInfo,
+} from './gh-pr.js';

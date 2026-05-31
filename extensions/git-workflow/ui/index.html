@@ -157,6 +157,46 @@
     .field label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
     .err { font-size: 10px; color: var(--danger); margin-top: 6px; min-height: 14px; }
 
+    .pr-link {
+      font-size: 11px;
+      color: var(--fg);
+      text-decoration: none;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pr-link:hover { color: var(--accent); text-decoration: underline; }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      font-size: 11px;
+      border-top: 1px solid var(--border);
+    }
+    .check-name {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+    }
+    .check-status {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .check-status.passing  { border-color: var(--success); color: var(--success); }
+    .check-status.failing  { border-color: var(--danger);  color: var(--danger);  }
+    .check-status.pending  { border-color: var(--warn);    color: var(--warn);    }
+    .check-status.skipped  { opacity: 0.5; }
+
+    .btn.warn { border-color: var(--warn); color: var(--warn); }
+
     #footer {
       padding: 6px 12px;
       border-top: 1px solid var(--border);
@@ -222,6 +262,14 @@
 
   <div class="section">
     <button class="btn btn-block primary" id="commit-push-btn" disabled>Commit or push</button>
+  </div>
+
+  <div class="section" id="pr-section" hidden>
+    <div class="row">
+      <span class="label">PR</span>
+      <a id="pr-link" class="pr-link" href="#" target="_blank"></a>
+    </div>
+    <div id="checks-list"></div>
   </div>
 </div>
 

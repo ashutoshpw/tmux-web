@@ -1,5 +1,20 @@
 import { createExtension } from '@tmux-web/ext-sdk';
 
+interface PrCheck {
+  name: string;
+  status: 'queued' | 'in_progress' | 'completed';
+  conclusion: string | null;
+  url: string;
+}
+
+interface PrInfo {
+  number: number;
+  title: string;
+  url: string;
+  headSha: string;
+  checks: PrCheck[];
+}
+
 interface PaneData {
   session: string;
   paneId: string;
@@ -17,6 +32,7 @@ interface PaneData {
   branches: string[];
   paneReady: boolean;
   fetchedAt: number;
+  pr?: PrInfo | null;
 }
 
 interface StatusResponse {
@@ -69,6 +85,86 @@ function populateBranchSelect(branches: string[], current: string) {
   }
 }
 
+const FAILED_CONCLUSIONS = new Set(['failure', 'timed_out', 'action_required', 'cancelled']);
+
+function checkStatusClass(check: PrCheck): string {
+  if (check.status !== 'completed') return 'pending';
+  if (check.conclusion === 'success' || check.conclusion === 'neutral' || check.conclusion === 'skipped') {
+    return check.conclusion === 'skipped' ? 'skipped' : 'passing';
+  }
+  if (check.conclusion && FAILED_CONCLUSIONS.has(check.conclusion)) return 'failing';
+  return 'pending';
+}
+
+function checkStatusLabel(check: PrCheck): string {
+  if (check.status === 'queued') return 'queued';
+  if (check.status === 'in_progress') return 'running';
+  return check.conclusion ?? 'unknown';
+}
+
+async function sendCheckError(checkUrl: string): Promise<void> {
+  try {
+    await ext.request('/send-keys', {
+      method: 'POST',
+      body: {
+        session: _session,
+        text: `The PR check failed with following error here: ${checkUrl}, do check the root cause for this issue`,
+      },
+    });
+  } catch (e) {
+    console.error('[git-workflow] send-keys failed:', e);
+  }
+}
+
+function renderPrSection(data: PaneData): void {
+  const section = document.getElementById('pr-section')!;
+  const checksList = document.getElementById('checks-list')!;
+  checksList.innerHTML = '';
+
+  if (!data.pr) {
+    section.setAttribute('hidden', '');
+    return;
+  }
+
+  section.removeAttribute('hidden');
+
+  const link = document.getElementById('pr-link') as HTMLAnchorElement;
+  link.textContent = `#${data.pr.number}: ${data.pr.title}`;
+  link.href = data.pr.url;
+
+  for (const check of data.pr.checks) {
+    const cls = checkStatusClass(check);
+    const row = document.createElement('div');
+    row.className = 'check-row';
+
+    const name = document.createElement('span');
+    name.className = 'check-name';
+    name.textContent = check.name;
+    name.title = check.name;
+
+    const badge = document.createElement('span');
+    badge.className = `check-status ${cls}`;
+    badge.textContent = checkStatusLabel(check);
+
+    row.appendChild(name);
+    row.appendChild(badge);
+
+    if (cls === 'failing') {
+      const btn = document.createElement('button');
+      btn.className = 'btn danger';
+      btn.style.padding = '2px 6px';
+      btn.style.fontSize = '10px';
+      btn.textContent = '↳ Send';
+      btn.title = 'Send failure prompt to active tmux window';
+      const url = check.url;
+      btn.addEventListener('click', () => { void sendCheckError(url); });
+      row.appendChild(btn);
+    }
+
+    checksList.appendChild(row);
+  }
+}
+
 function renderPanel(data: PaneData) {
   _currentData = data;
   _displayedPaneId = data.paneId;
@@ -113,6 +209,8 @@ function renderPanel(data: PaneData) {
 
   const btn = document.getElementById('commit-push-btn') as HTMLButtonElement;
   btn.disabled = !data.dirty && data.ahead === 0;
+
+  renderPrSection(data);
 
   ext.resize(document.body.scrollHeight + 16);
 }

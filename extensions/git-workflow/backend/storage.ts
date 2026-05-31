@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import type { PrInfo } from '@tmux-web/ext-gh-workflow';
 
 const DATA_ROOT = process.env.TMUX_WEB_DATA_ROOT
   ?? path.join(os.homedir(), '.tmux-web');
@@ -26,6 +27,7 @@ export interface PaneCache {
   branches: string[];
   paneReady: boolean;
   fetchedAt: number;
+  pr?: PrInfo | null;
 }
 
 interface Store {

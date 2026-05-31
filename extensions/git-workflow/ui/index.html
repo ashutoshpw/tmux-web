@@ -104,8 +104,6 @@
       line-height: 1.7;
     }
 
-    #panel { display: none; }
-
     .menu-item {
       display: flex;
       align-items: center;
@@ -187,12 +185,12 @@
 
 <div id="loading">connecting</div>
 
-<div id="empty-state" style="display:none">
+<div id="empty-state" hidden>
   Works with GitHub repositories only.<br>
   Open a pane in a GitHub-linked git repo.
 </div>
 
-<div id="panel">
+<div id="panel" hidden>
   <div class="section">
     <div class="row">
       <span class="label">Kind</span>

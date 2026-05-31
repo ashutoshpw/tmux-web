@@ -235,3 +235,5 @@ ext.onConfig((rawCfg) => {
   clearInterval(_pollTimer);
   _pollTimer = setInterval(loadAndRender, cfg.pollIntervalMs ?? 60_000) as unknown as number;
 });
+
+ext.ready();

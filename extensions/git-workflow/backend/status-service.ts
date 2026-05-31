@@ -62,6 +62,7 @@ async function buildPaneCache(session: string, pane: ActivePaneInfo): Promise<St
   const kind = classifyKind(panePath);
   const gitStatus = getGitStatus(root);
   const mainRepoPath = kind === 'worktree' ? resolveMainRepoPath(root) : root;
+  const branchSource = mainRepoPath ?? root;
 
   const entry: PaneCache = {
     session,
@@ -77,7 +78,7 @@ async function buildPaneCache(session: string, pane: ActivePaneInfo): Promise<St
     dirty: gitStatus.dirty,
     ahead: gitStatus.ahead,
     behind: gitStatus.behind,
-    branches: listBranchNames(root),
+    branches: listBranchNames(branchSource),
     paneReady,
     fetchedAt: Date.now(),
   };

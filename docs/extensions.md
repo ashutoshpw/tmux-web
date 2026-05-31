@@ -223,6 +223,8 @@ ext.onConfig(async (cfg) => {
   // render…
   ext.resize(document.body.scrollHeight);
 });
+
+ext.ready();
 ```
 
 What the SDK gives you:
@@ -233,6 +235,7 @@ What the SDK gives you:
 | `ext.onConfig(cb)` | Fires with the `config` block from `tmux-extension.json` |
 | `ext.onOpen(cb)` | Fires when the user opens the extension drawer |
 | `ext.onClose(cb)` | Fires when the user closes the extension drawer |
+| `ext.ready()` | Signal to the host that handlers are registered (call after `onContext` / `onOpen` setup) |
 | `ext.request<T>(path, opts?)` | Fetches `/ext/<id>/api${path}` — proxied to your backend's socket |
 | `ext.resize(height)` | Tells the host how tall the drawer should be |
 

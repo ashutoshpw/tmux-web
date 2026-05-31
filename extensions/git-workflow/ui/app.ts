@@ -37,6 +37,7 @@ const ext = createExtension();
 
 let _session = '';
 let _pollTimer = 0;
+let _drawerOpen = false;
 let _displayedPaneId = '';
 let _currentData: PaneData | null = null;
 let _pendingHandoffBranch = '';
@@ -47,7 +48,9 @@ function esc(s: string): string {
 
 function setVisible(id: string, show: boolean) {
   const el = document.getElementById(id);
-  if (el) el.style.display = show ? '' : 'none';
+  if (!el) return;
+  if (show) el.removeAttribute('hidden');
+  else el.setAttribute('hidden', '');
 }
 
 function updateTimestamp() {
@@ -85,6 +88,11 @@ function renderPanel(data: PaneData) {
   const branchEl = document.getElementById('branch-display')!;
   branchEl.textContent = data.branch;
 
+  const sessionEl = document.getElementById('session-label');
+  if (sessionEl) {
+    sessionEl.textContent = `${data.session} · win ${data.windowIndex} · ${data.branch}`;
+  }
+
   populateBranchSelect(data.branches, data.branch);
 
   const pathEl = document.getElementById('path-display')!;
@@ -120,7 +128,10 @@ function renderEmpty(message: string) {
 }
 
 async function fetchStatus() {
-  if (!_session) return;
+  if (!_session) {
+    renderEmpty('Waiting for session context…');
+    return;
+  }
 
   try {
     const res = await ext.request<StatusResponse>(
@@ -283,15 +294,18 @@ ext.onContext((ctx) => {
   _session = ctx.session;
   const el = document.getElementById('session-label');
   if (el) el.textContent = `session: ${ctx.session}`;
+  if (_drawerOpen) void fetchStatus();
 });
 
 ext.onOpen(() => {
+  _drawerOpen = true;
   void fetchStatus();
   const cfg = ext.getConfig() as Config;
   startPoll(cfg?.pollIntervalMs ?? 10_000);
 });
 
 ext.onClose(() => {
+  _drawerOpen = false;
   stopPoll();
 });
 
@@ -301,3 +315,5 @@ ext.onConfig((rawCfg) => {
 });
 
 document.addEventListener('DOMContentLoaded', wireUi);
+
+ext.ready();

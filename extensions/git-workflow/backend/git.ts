@@ -11,6 +11,7 @@ function git(args: string[], cwd: string): string {
     cwd,
     encoding: 'utf-8',
     timeout: GIT_TIMEOUT_MS,
+    stdio: ['ignore', 'pipe', 'pipe'],
   }).trimEnd();
 }
 

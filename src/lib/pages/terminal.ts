@@ -85,6 +85,7 @@ ${drawerResizeScript(`ext-${id}-drawer`, `tmux-web:drawer-width:ext:${id}`, 360)
   function openDrawer() {
     drawer.classList.add('open');
     backdrop.classList.add('open');
+    sendMessages();
     notifyFrame('ext:open');
   }
   function closeDrawer() {

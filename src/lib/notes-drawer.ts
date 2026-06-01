@@ -53,7 +53,15 @@ export function notesDrawerCSS(): string {
     flex: 1; padding: 16px; outline: none; overflow-y: auto;
     font-size: 13px; line-height: 1.7; font-family: 'JetBrains Mono', monospace;
     white-space: pre-wrap; word-break: break-word; color: var(--page-fg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-border) transparent;
   }
+  #notes-editor::-webkit-scrollbar { width: 4px; }
+  #notes-editor::-webkit-scrollbar-track { background: transparent; }
+  #notes-editor::-webkit-scrollbar-thumb {
+    background: var(--panel-border); border-radius: 2px;
+  }
+  #notes-editor::-webkit-scrollbar-thumb:hover { background: var(--panel-muted); }
   #notes-editor:empty::before {
     content: "Double-click to add notes..."; color: var(--panel-muted); pointer-events: none;
   }

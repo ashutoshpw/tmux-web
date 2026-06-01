@@ -39,6 +39,8 @@ import { isThemeTemplateId } from "./lib/themes/index.js";
 import { installPlugin, uninstallPlugin } from "./lib/plugins.js";
 import { buildCommandbarSessions } from "./lib/commandbar.js";
 import { pinView, unpinView, listPinnedViews } from "./lib/pinned-views.js";
+import { listWindowLabels, setWindowLabel } from "./lib/window-labels.js";
+import { captureAndStoreWindows, getStoredWindows } from "./lib/session-windows.js";
 import { buildSidebarSessions } from "./lib/sessions-sidebar.js";
 import {
 	getSessionPaneTarget,
@@ -289,6 +291,9 @@ app.get("/", (c) => {
 app.get("/s/:session", async (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
 	await recordSessionAccess(session);
+	// Focus event: snapshot this session's windows (+ worktree flags) to lowdb so
+	// the sidebar can list them without spawning tmux per session.
+	captureAndStoreWindows(session);
 	const sessions = listSessions();
 	const accessMap = getSessionAccessMap();
 	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(sessions, accessMap) : [];
@@ -445,6 +450,12 @@ app.get("/api/sidebar/sessions", (c) => {
 	));
 });
 
+// Sidebar window list — served from lowdb (captured on focus); never spawns tmux.
+app.get("/api/sidebar/session-windows/:session", (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	return c.json(getStoredWindows(session));
+});
+
 app.post("/api/pinned-views", async (c) => {
 	let body: { sessionName?: unknown; windowIndex?: unknown };
 	try {
@@ -538,7 +549,31 @@ app.post("/api/session/:session/upload", async (c) => {
 
 app.get("/api/session/:session/windows", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
-	return c.json(listSessionWindows(session));
+	const labels = new Map(listWindowLabels(session).map((l) => [l.windowIndex, l.label]));
+	const stored = new Map(getStoredWindows(session).map((w) => [w.index, w]));
+	const windows = listSessionWindows(session).map((w) => ({
+		...w,
+		label: labels.get(w.index) ?? null,
+		worktree: stored.get(w.index)?.worktree ?? false,
+	}));
+	return c.json(windows);
+});
+
+app.post("/api/session/:session/window-label", async (c) => {
+	const session = decodeURIComponent(c.req.param("session"));
+	let body: { windowIndex?: unknown; label?: unknown };
+	try {
+		body = await c.req.json();
+	} catch {
+		return c.json({ error: "invalid json" }, 400);
+	}
+	const { windowIndex } = body;
+	if (typeof windowIndex !== "number" || !Number.isInteger(windowIndex) || windowIndex < 0) {
+		return c.json({ error: "windowIndex must be a non-negative integer" }, 400);
+	}
+	const label = typeof body.label === "string" ? body.label : "";
+	const labels = await setWindowLabel(session, windowIndex, label);
+	return c.json(labels);
 });
 
 app.post("/api/session/:session/select-window", async (c) => {
@@ -577,6 +612,7 @@ app.post("/api/session/:session/new-window", (c) => {
 	try {
 		newSessionWindow(session);
 		recordActivePane(session);
+		captureAndStoreWindows(session);
 		return c.json({ ok: true });
 	} catch (err) {
 		if (err instanceof TmuxWindowsError) {

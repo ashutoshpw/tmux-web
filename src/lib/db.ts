@@ -50,6 +50,25 @@ export interface WatchedPaneRecord {
 	watchedAt: number;     // ms timestamp
 }
 
+export interface WindowLabelRecord {
+	sessionName: string;
+	windowIndex: number;
+	label: string;         // custom label stored in tmux-web only (not real tmux)
+	updatedAt: number;     // ms timestamp
+}
+
+export interface StoredWindowEntry {
+	index: number;
+	name: string;          // real tmux window name at capture time
+	worktree: boolean;     // window's active pane sits in a git worktree
+}
+
+export interface SessionWindowsRecord {
+	sessionName: string;
+	windows: StoredWindowEntry[];
+	updatedAt: number;     // ms timestamp; captured when the session is focused
+}
+
 export interface DbSchema {
 	notes: NoteRecord[];
 	scheduledTasks: StoredTask[];
@@ -57,6 +76,8 @@ export interface DbSchema {
 	sessionAccess: SessionAccessRecord[];
 	pinnedViews: PinnedViewRecord[];
 	watchedPanes: WatchedPaneRecord[];
+	windowLabels: WindowLabelRecord[];
+	sessionWindows: SessionWindowsRecord[];
 }
 
 const dbDir = getDataRoot();
@@ -64,5 +85,5 @@ mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(
 	new JSONFile<DbSchema>(join(dbDir, 'db.json')),
-	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], pinnedViews: [], watchedPanes: [] },
+	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], pinnedViews: [], watchedPanes: [], windowLabels: [], sessionWindows: [] },
 );

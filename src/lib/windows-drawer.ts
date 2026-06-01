@@ -33,7 +33,15 @@ export function windowsDrawerCSS(): string {
   #windows-error.show { display: block; }
   #windows-list {
     flex: 1; overflow-y: auto; padding: 8px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-border) transparent;
   }
+  #windows-list::-webkit-scrollbar { width: 4px; }
+  #windows-list::-webkit-scrollbar-track { background: transparent; }
+  #windows-list::-webkit-scrollbar-thumb {
+    background: var(--panel-border); border-radius: 2px;
+  }
+  #windows-list::-webkit-scrollbar-thumb:hover { background: var(--panel-muted); }
   .windows-row {
     display: flex; align-items: center; gap: 10px;
     width: 100%; min-height: 48px; padding: 12px 16px;
@@ -142,7 +150,7 @@ function renderWindowsList(windows) {
 
     const name = document.createElement('span');
     name.className = 'windows-row-name';
-    name.textContent = w.name;
+    name.textContent = w.label || w.name;
 
     btn.appendChild(idx);
     btn.appendChild(name);

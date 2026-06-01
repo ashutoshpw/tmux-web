@@ -36,6 +36,57 @@ export function listSessionWindows(session: string): TmuxWindow[] {
 	}
 }
 
+export type TmuxWindowWithPath = TmuxWindow & { path: string };
+
+export function captureSessionWindowsWithPath(session: string): TmuxWindowWithPath[] {
+	try {
+		const raw = execFileSync(
+			"tmux",
+			[
+				"list-windows",
+				"-t",
+				session,
+				"-F",
+				"#{window_index}\t#{window_name}\t#{window_active}\t#{pane_current_path}",
+			],
+			{ encoding: "utf-8", timeout: 3000 },
+		);
+		return raw
+			.trim()
+			.split("\n")
+			.filter(Boolean)
+			.map((line) => {
+				const [index, name, active, path] = line.split("\t");
+				return {
+					index: parseInt(index, 10),
+					name,
+					active: active === "1",
+					path: path ?? "",
+				};
+			});
+	} catch {
+		return [];
+	}
+}
+
+// A linked git worktree reports a different --git-dir than --git-common-dir;
+// the main worktree reports them equal. Any non-git dir / error → not a worktree.
+export function isGitWorktree(dir: string): boolean {
+	if (!dir) return false;
+	try {
+		const out = execFileSync(
+			"git",
+			["-C", dir, "rev-parse", "--git-dir", "--git-common-dir"],
+			{ encoding: "utf-8", timeout: 3000, stdio: ["ignore", "pipe", "ignore"] },
+		);
+		const [gitDir, commonDir] = out.trim().split("\n");
+		if (!gitDir || !commonDir) return false;
+		return gitDir !== commonDir;
+	} catch {
+		return false;
+	}
+}
+
 function sessionExists(session: string): boolean {
 	try {
 		execFileSync("tmux", ["has-session", "-t", session], { timeout: 3000 });

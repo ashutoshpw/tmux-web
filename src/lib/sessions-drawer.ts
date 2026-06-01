@@ -59,7 +59,15 @@ export function sessionsDrawerCSS(): string {
   #sessions-error.show { display: block; }
   #sessions-list {
     flex: 1; overflow-y: auto; padding: 8px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-border) transparent;
   }
+  #sessions-list::-webkit-scrollbar { width: 4px; }
+  #sessions-list::-webkit-scrollbar-track { background: transparent; }
+  #sessions-list::-webkit-scrollbar-thumb {
+    background: var(--panel-border); border-radius: 2px;
+  }
+  #sessions-list::-webkit-scrollbar-thumb:hover { background: var(--panel-muted); }
   .sessions-section-label {
     padding: 8px 16px 4px; font-size: 10px; letter-spacing: 0.08em;
     text-transform: uppercase; color: var(--panel-muted);
@@ -94,6 +102,59 @@ export function sessionsDrawerCSS(): string {
   }
   .sessions-pin-btn:hover { color: var(--panel-accent); }
   .sessions-pin-btn.pinned { color: #fbbf24; }
+  .sessions-row-icon {
+    flex-shrink: 0; width: 16px; height: 16px; color: var(--panel-muted);
+    border: none; background: none; padding: 0; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sessions-row-icon svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+  button.sessions-row-icon { cursor: pointer; transition: color 0.15s; }
+  button.sessions-row-icon:hover { color: var(--panel-accent); }
+  button.sessions-row-icon.expanded { color: var(--panel-accent); }
+  .sessions-item { display: flex; flex-direction: column; }
+  .sessions-windows {
+    display: none; flex-direction: column;
+    background: rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid rgba(36, 50, 65, 0.5);
+  }
+  .sessions-windows.open { display: flex; }
+  .sessions-window-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px 8px 40px; cursor: pointer; color: var(--page-fg);
+    font-family: 'JetBrains Mono', monospace;
+    border-bottom: 1px solid rgba(36, 50, 65, 0.3);
+    transition: background 0.15s;
+  }
+  .sessions-window-row:last-child { border-bottom: none; }
+  .sessions-window-row:hover { background: rgba(125, 211, 252, 0.06); }
+  .sessions-window-index {
+    font-size: 11px; color: var(--panel-muted); flex-shrink: 0; min-width: 18px;
+  }
+  .sessions-window-name {
+    flex: 1; min-width: 0; font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .sessions-window-wt {
+    flex-shrink: 0; width: 13px; height: 13px; fill: var(--panel-success, #7ee787);
+    display: block;
+  }
+  .sessions-window-input {
+    flex: 1; min-width: 0; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--panel-bg); color: var(--page-fg);
+    border: 1px solid var(--panel-accent); border-radius: 4px; padding: 2px 6px;
+  }
+  .sessions-window-edit {
+    flex-shrink: 0; background: none; border: none; cursor: pointer;
+    color: var(--panel-muted); padding: 4px; border-radius: 4px;
+    display: flex; align-items: center; transition: color 0.15s;
+  }
+  .sessions-window-edit:hover { color: var(--panel-accent); }
+  .sessions-window-edit svg { width: 13px; height: 13px; fill: currentColor; display: block; }
+  .sessions-windows-empty {
+    padding: 8px 12px 8px 40px; font-size: 11px; color: var(--panel-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
   .sessions-empty {
     padding: 16px; text-align: center; color: var(--panel-muted);
     font-size: 12px; font-family: 'JetBrains Mono', monospace;
@@ -232,12 +293,153 @@ function createPinButton(pinned, sessionName, windowIndex) {
   return btn;
 }
 
-function createRow({ label, meta, href, current, missing, pinned, sessionName, windowIndex }) {
+function makeSvgIcon(pathData, className) {
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = className;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', pathData);
+  svg.appendChild(path);
+  el.appendChild(svg);
+  return el;
+}
+
+const FOLDER_PATH = 'M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z';
+const PENCIL_PATH = 'M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z';
+const WORKTREE_PATH = 'M6 3a3 3 0 0 0-1 5.83v6.34a3 3 0 1 0 2 0V8.83A3 3 0 0 0 6 3zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm0 12a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM18 3a3 3 0 0 0-1 5.83V9a4 4 0 0 1-4 4h-2a3 3 0 1 0 0 2h2a6 6 0 0 0 6-6v-.17A3 3 0 0 0 18 3zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM9 13a1 1 0 1 1 0 2 1 1 0 0 1 0-2z';
+
+function startWindowEdit(sessionName, win, nameEl) {
+  if (nameEl.parentNode && nameEl.parentNode.querySelector('.sessions-window-input')) return;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'sessions-window-input';
+  input.value = win.label || win.name || '';
+  input.placeholder = win.name || '';
+  input.addEventListener('click', (event) => event.stopPropagation());
+
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    if (save) {
+      try {
+        const res = await fetch(
+          '/api/session/' + encodeURIComponent(sessionName) + '/window-label',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ windowIndex: win.index, label: input.value }),
+          },
+        );
+        if (res.ok) win.label = input.value.trim() || null;
+      } catch {}
+    }
+    nameEl.textContent = win.label || win.name;
+    input.replaceWith(nameEl);
+  };
+
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void finish(true); }
+    else if (event.key === 'Escape') { event.preventDefault(); void finish(false); }
+  });
+  input.addEventListener('blur', () => { void finish(true); });
+
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function createWindowRow(sessionName, win) {
+  const row = document.createElement('div');
+  row.className = 'sessions-window-row';
+
+  const idx = document.createElement('span');
+  idx.className = 'sessions-window-index';
+  idx.textContent = String(win.index);
+
+  const name = document.createElement('span');
+  name.className = 'sessions-window-name';
+  name.textContent = win.label || win.name;
+
+  row.appendChild(idx);
+  if (win.worktree) {
+    const wt = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    wt.setAttribute('viewBox', '0 0 24 24');
+    wt.setAttribute('class', 'sessions-window-wt');
+    const wtTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+    wtTitle.textContent = 'git worktree';
+    const wtPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    wtPath.setAttribute('d', WORKTREE_PATH);
+    wt.appendChild(wtTitle);
+    wt.appendChild(wtPath);
+    row.appendChild(wt);
+  }
+
+  const editBtn = makeSvgIcon(PENCIL_PATH, 'sessions-window-edit');
+  editBtn.title = 'Rename label';
+  editBtn.setAttribute('aria-label', 'Rename label');
+  editBtn.addEventListener('click', (event) => {
+    event.stopPropagation();
+    startWindowEdit(sessionName, win, name);
+  });
+
+  row.appendChild(name);
+  row.appendChild(editBtn);
+
+  row.addEventListener('click', () => {
+    window.location.href = '/s/' + encodeURIComponent(sessionName) + '?window=' + win.index;
+  });
+
+  return row;
+}
+
+async function loadWindows(sessionName, container) {
+  clearSessionsList(container);
+  let windows = [];
+  try {
+    const res = await fetch('/api/sidebar/session-windows/' + encodeURIComponent(sessionName));
+    if (res.ok) windows = await res.json();
+  } catch {}
+  clearSessionsList(container);
+  if (!windows.length) {
+    container.appendChild(Object.assign(document.createElement('div'), {
+      className: 'sessions-windows-empty',
+      textContent: 'Open this session to load its windows',
+    }));
+  } else {
+    for (const win of windows) container.appendChild(createWindowRow(sessionName, win));
+  }
+  container.dataset.loaded = '1';
+}
+
+async function toggleWindows(sessionName, iconEl, container) {
+  if (container.classList.contains('open')) {
+    container.classList.remove('open');
+    iconEl.classList.remove('expanded');
+    return;
+  }
+  container.classList.add('open');
+  iconEl.classList.add('expanded');
+  if (!container.dataset.loaded) await loadWindows(sessionName, container);
+}
+
+function createRow({ label, meta, href, current, missing, pinned, sessionName, windowIndex, expandable }) {
   const row = document.createElement('button');
   row.type = 'button';
   row.className = 'sessions-row'
     + (current ? ' current' : '')
     + (missing ? ' missing' : '');
+
+  let folderIcon = null;
+  if (expandable) {
+    folderIcon = makeSvgIcon(FOLDER_PATH, 'sessions-row-icon');
+    folderIcon.title = 'Show windows';
+    folderIcon.setAttribute('aria-label', 'Show windows');
+    row.appendChild(folderIcon);
+  }
 
   const main = document.createElement('span');
   main.className = 'sessions-row-main';
@@ -261,7 +463,19 @@ function createRow({ label, meta, href, current, missing, pinned, sessionName, w
     });
   }
 
-  return row;
+  if (!expandable) return row;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'sessions-item';
+  const windowsContainer = document.createElement('div');
+  windowsContainer.className = 'sessions-windows';
+  folderIcon.addEventListener('click', (event) => {
+    event.stopPropagation();
+    void toggleWindows(sessionName, folderIcon, windowsContainer);
+  });
+  wrap.appendChild(row);
+  wrap.appendChild(windowsContainer);
+  return wrap;
 }
 
 function renderSectionLabel(text) {
@@ -297,6 +511,7 @@ function renderSidebar() {
         pinned: true,
         sessionName: view.sessionName,
         windowIndex: view.windowIndex,
+        expandable: view.windowIndex === undefined && !view.missing,
       }));
     }
   }
@@ -313,6 +528,7 @@ function renderSidebar() {
         pinned: false,
         sessionName: session.name,
         windowIndex: undefined,
+        expandable: true,
       }));
     }
   }

@@ -73,7 +73,17 @@ export function schedulerDrawerCSS(): string {
   .sched-task-count {
     font-size: 10px; color: var(--panel-success); font-family: 'JetBrains Mono', monospace;
   }
-  .sched-task-list { flex: 1; overflow-y: auto; }
+  .sched-task-list {
+    flex: 1; overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--panel-border) transparent;
+  }
+  .sched-task-list::-webkit-scrollbar { width: 4px; }
+  .sched-task-list::-webkit-scrollbar-track { background: transparent; }
+  .sched-task-list::-webkit-scrollbar-thumb {
+    background: var(--panel-border); border-radius: 2px;
+  }
+  .sched-task-list::-webkit-scrollbar-thumb:hover { background: var(--panel-muted); }
   .sched-task-item {
     padding: 10px 16px; border-bottom: 1px solid rgba(36, 50, 65, 0.6);
     display: flex; flex-direction: column; gap: 4px;

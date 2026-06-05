@@ -41,6 +41,25 @@ describe('detectState', () => {
 		'❯',
 	].join('\n');
 
+	// Claude Code ≥2.1 dropped "(esc to interrupt)" from the spinner line; the
+	// present-tense ellipsis spinner is the only working chrome left.
+	const claudeWorkingNew = [
+		'❯ Please count from 1 to 40',
+		'✢ Scampering…',
+		'────────────',
+		'❯',
+		'  Node: v22 arm64 tmux-web (main)',
+	].join('\n');
+
+	// The post-completion line persists on an idle screen — past tense, no
+	// ellipsis — and must NOT read as working.
+	const claudeDoneIdle = [
+		'  40',
+		'✻ Cogitated for 9s',
+		'────────────',
+		'❯',
+	].join('\n');
+
 	const claudeBlocked = [
 		'Do you want to proceed?',
 		'❯ 1. Yes',
@@ -53,6 +72,12 @@ describe('detectState', () => {
 		expect(detectState('claude', claudeIdle)).toBe('idle');
 		expect(detectState('claude', claudeWorking)).toBe('working');
 		expect(detectState('claude', claudeBlocked)).toBe('blocked');
+	});
+
+	it('classifies the post-2.1 Claude spinner (no interrupt hint)', () => {
+		expect(detectState('claude', claudeWorkingNew)).toBe('working');
+		expect(detectState('claude', '· Moseying…\n❯')).toBe('working');
+		expect(detectState('claude', claudeDoneIdle)).toBe('idle');
 	});
 
 	it('classifies Codex states', () => {

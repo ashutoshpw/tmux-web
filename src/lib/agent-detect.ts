@@ -102,9 +102,15 @@ export function identifyAgent(command: string, argvTexts: string[] = []): Agent 
 // is full of words like "yes", "no", "approve", "do you want" that would
 // produce constant false positives if matched globally. The reliable signals
 // are structural UI chrome that an agent renders ONLY in a given state:
-//   • working → the footer hint "esc to interrupt" / "ctrl+c to interrupt".
+//   • working → the footer hint "esc to interrupt" / "ctrl+c to interrupt",
+//     or (Claude Code ≥2.1, which dropped the hint) a present-tense spinner
+//     line ("✢ Scampering…").
 //   • blocked → a selection menu with the cursor on a numbered option ("❯ 1. Yes").
 // Both live in the footer/prompt box at the bottom of the screen.
+//
+// Streaming-response phases render no chrome at all, so substring heuristics
+// alone report 'idle' there; the probe layer (agents-watch) compensates with
+// screen-delta detection between polls.
 
 const LIVE_REGION_LINES = 20;
 
@@ -152,6 +158,18 @@ function hasSpinnerActivity(lines: string[]): boolean {
 	return false;
 }
 
+/**
+ * Claude Code's present-tense spinner line, e.g. "✢ Scampering…" or
+ * "· Moseying…" — rendered ONLY while generating. Since ~2.1 the
+ * "(esc to interrupt)" hint is gone from this line, so the spinner itself is
+ * the working signal. The persistent post-completion line ("✻ Cogitated for
+ * 9s") carries no ellipsis, so requiring the … avoids matching it; the old
+ * format ("✻ Cogitating… (12s · esc to interrupt)") still matches.
+ */
+function hasActiveSpinnerLine(lines: string[]): boolean {
+	return lines.some((l) => /^[·✢✳✶✻✽*] \S.*…/.test(l));
+}
+
 function detectClaude(lines: string[], liveLower: string): AgentState {
 	// Explicit permission phrasing or a numbered choice menu.
 	if (
@@ -163,9 +181,10 @@ function detectClaude(lines: string[], liveLower: string): AgentState {
 	) {
 		return 'blocked';
 	}
-	// Claude's spinner line ("✻ Crunched for 40s") persists after completion, so
-	// it is NOT a reliable working signal — the interrupt hint is.
-	if (hasInterruptHint(liveLower)) return 'working';
+	// The done-line ("✻ Crunched for 40s") persists after completion, so bare
+	// spinner glyphs are NOT a reliable working signal — the interrupt hint
+	// (old UI) or an ellipsis spinner line (new UI) is.
+	if (hasInterruptHint(liveLower) || hasActiveSpinnerLine(lines)) return 'working';
 	return 'idle';
 }
 

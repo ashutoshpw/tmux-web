@@ -2,16 +2,19 @@
  * Orchestrates agent detection over the user's recently-viewed panes.
  *
  * Compute budget is deliberately tight: we only ever look at the (≤10) panes in
- * the watch list, and only when something asks us to — either the /agents page
- * polling on demand, or the optional background watcher. Each probe cycle costs
- * at most: one `ps` snapshot + one `tmux list-panes` per distinct watched
- * session + one `tmux capture-pane` per alive watched pane.
+ * the watch list (plus each watched session's active pane, so agents focused
+ * via native prefix-key switches get picked up), and only when something asks
+ * us to — either the /agents page polling on demand, or the optional background
+ * watcher. Each probe cycle costs at most: one `ps` snapshot + one
+ * `tmux list-panes` per distinct watched session + one `tmux capture-pane` per
+ * alive watched pane.
  */
 import { execFileSync } from 'node:child_process';
 import { capturePaneLines } from './tmux-capture.js';
 import { listSessionPanes, type PaneInfo } from './tmux-panes.js';
-import { getWatchedPanes, pruneWatchedPanes } from './watched-panes.js';
+import { getWatchedPanes, pruneWatchedPanes, recordWatchedPane } from './watched-panes.js';
 import { identifyAgent, detectState, type Agent, type AgentState } from './agent-detect.js';
+import type { WatchedPaneRecord } from './db.js';
 
 export interface AgentStatus {
 	paneId: string;
@@ -79,6 +82,21 @@ function descendantArgv(rootPid: number, snapshot: Map<number, ProcNode>): strin
 // ── Probe ──────────────────────────────────────────────────────────────────
 
 /**
+ * Last captured screen hash per pane, for change detection between probes.
+ * While an agent streams a response it renders no UI chrome at all (no
+ * spinner, no interrupt hint), so substring heuristics classify it 'idle';
+ * a screen that changed since the previous probe is the reliable signal.
+ */
+const lastScreenHash = new Map<string, number>();
+
+/** Cheap djb2 hash — we only need "did the screen change", not crypto. */
+function hashScreen(s: string): number {
+	let h = 5381;
+	for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+	return h;
+}
+
+/**
  * Probe every watched pane, prune dead ones, and return the agent panes with
  * their current state. Panes/sessions that have vanished are skipped silently.
  */
@@ -99,11 +117,36 @@ export async function probeWatchedPanes(): Promise<AgentStatus[]> {
 		for (const p of panes) aliveIds.add(p.paneId);
 	}
 	await pruneWatchedPanes(aliveIds);
+	for (const id of lastScreenHash.keys()) {
+		if (!aliveIds.has(id)) lastScreenHash.delete(id);
+	}
 
 	const snapshot = buildProcessSnapshot();
+
+	// Native (prefix-key) window/pane switches never hit the web UI, so a pane
+	// focused that way would never enter the watch list. Pick it up here: when
+	// a watched session's currently-active pane is unwatched but runs an agent,
+	// start watching it and include it in this cycle.
+	const watchedIds = new Set(watched.map((w) => w.paneId));
+	const probeList: WatchedPaneRecord[] = [...watched];
+	for (const [sessionName, panes] of panesBySession) {
+		const active = panes.find((p) => p.active && p.windowActive);
+		if (!active || watchedIds.has(active.paneId)) continue;
+		if (!identifyAgent(active.command, descendantArgv(active.pid, snapshot))) continue;
+		const rec = {
+			paneId: active.paneId,
+			sessionName,
+			windowIndex: active.windowIndex,
+			paneIndex: active.paneIndex,
+		};
+		await recordWatchedPane(rec);
+		watchedIds.add(active.paneId);
+		probeList.unshift({ ...rec, watchedAt: Date.now() });
+	}
+
 	const results: AgentStatus[] = [];
 
-	for (const w of watched) {
+	for (const w of probeList) {
 		const pane = panesBySession.get(w.sessionName)?.find((p) => p.paneId === w.paneId);
 		if (!pane) continue; // dead — already pruned
 
@@ -117,6 +160,14 @@ export async function probeWatchedPanes(): Promise<AgentStatus[]> {
 			// screen TUIs like Claude Code, where the agent chrome lives).
 			const screen = capturePaneLines(pane.target, 0);
 			state = detectState(agent, screen);
+			// Screen-delta fallback for chrome-less phases (e.g. Claude Code
+			// streaming a response): heuristics say idle, but the screen moved
+			// since the last probe ⇒ the agent is producing output. 'blocked'
+			// screens are static, so this only ever upgrades idle → working.
+			const h = hashScreen(screen);
+			const prev = lastScreenHash.get(pane.paneId);
+			lastScreenHash.set(pane.paneId, h);
+			if (state === 'idle' && prev !== undefined && prev !== h) state = 'working';
 		} catch {
 			// Pane vanished mid-cycle; leave state unknown.
 		}

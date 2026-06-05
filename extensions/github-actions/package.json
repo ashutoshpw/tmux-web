@@ -1,6 +1,6 @@
 {
   "name": "@tmux-web/ext-github-actions",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "GitHub Actions sidebar extension for tmux-web",
   "type": "module",
   "license": "MIT",

@@ -864,8 +864,11 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 
 	// Mirror tmux-side window switches (Ctrl+B n, other clients, scripts) back to
 	// this tab. One control client per session, shared across tabs, refcounted.
+	// Also feed the agents watch-list here so a window reached only from the tmux
+	// side (never clicked in the web UI) still gets its active pane probed.
 	releaseControl = acquireControlClient(sessionName, ({ activeIndex, windows }) => {
 		sendServerMessage(ws, { type: "window_changed", activeIndex, windows });
+		recordActivePane(sessionName);
 	});
 
 	syncMaxTimer = setTimeout(finishSync, syncMaxMs);

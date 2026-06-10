@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getUploadsRoot } from './state-paths.js';
 
-const MIME_TO_EXT: Record<string, string> = {
+const IMAGE_MIME_TO_EXT: Record<string, string> = {
 	'image/png': '.png',
 	'image/jpeg': '.jpg',
 	'image/webp': '.webp',
@@ -29,7 +29,7 @@ function parseMaxUploadBytes(): number {
 
 const MAX_UPLOAD_BYTES = parseMaxUploadBytes();
 
-function sniffMime(buf: Buffer): string | null {
+function sniffImageMime(buf: Buffer): string | null {
 	if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
 		return 'image/png';
 	}
@@ -44,18 +44,9 @@ function sniffMime(buf: Buffer): string | null {
 	return null;
 }
 
-function resolveMime(declared: string | undefined, buf: Buffer): string {
-	const normalized = declared?.split(';')[0]?.trim().toLowerCase();
-	if (normalized && MIME_TO_EXT[normalized]) {
-		const sniffed = sniffMime(buf);
-		if (sniffed && sniffed !== normalized) {
-			throw new ImageUploadError('file content does not match declared type', 400);
-		}
-		return normalized;
-	}
-	const sniffed = sniffMime(buf);
-	if (sniffed) return sniffed;
-	throw new ImageUploadError('unsupported image type', 400);
+function sanitizeFilename(name: string): string {
+	// Strip directory components and replace dangerous characters
+	return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, '_') || 'upload';
 }
 
 function localDateFolder(): string {
@@ -69,6 +60,7 @@ function localDateFolder(): string {
 export async function saveUploadedImage(
 	data: Buffer,
 	declaredMime?: string,
+	originalName?: string,
 ): Promise<{ path: string }> {
 	if (data.length === 0) {
 		throw new ImageUploadError('empty file', 400);
@@ -77,13 +69,30 @@ export async function saveUploadedImage(
 		throw new ImageUploadError(`file exceeds ${MAX_UPLOAD_BYTES} bytes`, 413);
 	}
 
-	const mime = resolveMime(declaredMime, data);
-	const ext = MIME_TO_EXT[mime];
 	const dateDir = localDateFolder();
 	const dir = path.join(getUploadsRoot(), dateDir);
 	await mkdir(dir, { recursive: true, mode: 0o700 });
 
-	const filename = `${randomUUID()}${ext}`;
+	let filename: string;
+	const normalized = declaredMime?.split(';')[0]?.trim().toLowerCase();
+	const isImage = normalized && IMAGE_MIME_TO_EXT[normalized];
+
+	if (isImage) {
+		const sniffed = sniffImageMime(data);
+		if (sniffed && sniffed !== normalized) {
+			throw new ImageUploadError('file content does not match declared type', 400);
+		}
+		const ext = IMAGE_MIME_TO_EXT[normalized];
+		filename = `${randomUUID()}${ext}`;
+	} else if (originalName) {
+		const safe = sanitizeFilename(originalName);
+		const ext = path.extname(safe);
+		const base = path.basename(safe, ext);
+		filename = `${base}-${randomUUID()}${ext}`;
+	} else {
+		filename = randomUUID();
+	}
+
 	const filePath = path.join(dir, filename);
 	await writeFile(filePath, data, { mode: 0o600 });
 

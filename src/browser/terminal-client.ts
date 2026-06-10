@@ -563,12 +563,9 @@ function isImageMime(type: string | undefined): boolean {
 	return typeof type === 'string' && type.startsWith('image/');
 }
 
-function getImageFileFromDataTransfer(dt: DataTransfer | null): File | null {
+function getFirstFileFromDataTransfer(dt: DataTransfer | null): File | null {
 	if (!dt?.files?.length) return null;
-	for (let i = 0; i < dt.files.length; i++) {
-		if (isImageMime(dt.files[i]?.type)) return dt.files[i] ?? null;
-	}
-	return null;
+	return dt.files[0] ?? null;
 }
 
 function getImageFileFromClipboardData(cd: DataTransfer | null): File | null {
@@ -587,7 +584,8 @@ function setUploadStatus(msg: string | null) {
 
 async function uploadImageBlob(blob: Blob): Promise<string> {
 	const fd = new FormData();
-	fd.append('file', blob, 'upload');
+	const filename = blob instanceof File && blob.name ? blob.name : 'upload';
+	fd.append('file', blob, filename);
 	const res = await fetch(uploadUrl, { method: 'POST', body: fd });
 	if (!res.ok) {
 		let err = 'upload failed';
@@ -687,7 +685,7 @@ let terminalDragDepth = 0;
 container.addEventListener('dragenter', (event) => {
 	event.preventDefault();
 	terminalDragDepth++;
-	if (getImageFileFromDataTransfer(event.dataTransfer)) {
+	if (getFirstFileFromDataTransfer(event.dataTransfer)) {
 		container.classList.add('terminal-drag-over');
 	}
 });
@@ -707,7 +705,7 @@ container.addEventListener('drop', async (event) => {
 	event.preventDefault();
 	terminalDragDepth = 0;
 	container.classList.remove('terminal-drag-over');
-	const file = getImageFileFromDataTransfer(event.dataTransfer);
+	const file = getFirstFileFromDataTransfer(event.dataTransfer);
 	if (file) await ingestImageBlob(file);
 });
 

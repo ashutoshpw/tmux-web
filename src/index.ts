@@ -581,7 +581,7 @@ app.post("/api/session/:session/upload", async (c) => {
 	try {
 		const arrayBuffer = await file.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
-		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined);
+		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined, file.name || undefined);
 		return c.json({ path: filePath });
 	} catch (err) {
 		if (err instanceof ImageUploadError) {

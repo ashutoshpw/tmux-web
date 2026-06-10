@@ -67,6 +67,7 @@ import {
 	probeWatchedPanes,
 	startBackgroundWatch,
 	getCachedAgentStatuses,
+	requestProbe,
 } from "./lib/agents-watch.js";
 
 loadDotEnv();
@@ -864,11 +865,24 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 
 	// Mirror tmux-side window switches (Ctrl+B n, other clients, scripts) back to
 	// this tab. One control client per session, shared across tabs, refcounted.
-	// Also feed the agents watch-list here so a window reached only from the tmux
-	// side (never clicked in the web UI) still gets its active pane probed.
+	let lastActiveIndex = -1;
+	let lastWindowKey = "";
 	releaseControl = acquireControlClient(sessionName, ({ activeIndex, windows }) => {
 		sendServerMessage(ws, { type: "window_changed", activeIndex, windows });
-		recordActivePane(sessionName);
+		// Only react to STRUCTURAL changes — the active window switched, or a
+		// window was added/removed. A pure %window-renamed leaves activeIndex and
+		// the index set untouched, so it's filtered out here (those fire often via
+		// tmux automatic-rename and never indicate a new agent location). On a real
+		// change, feed the agents watch-list (so a window reached only from the
+		// tmux side still gets probed) and request a throttled out-of-band probe.
+		const windowKey = windows.map((w) => w.index).join(",");
+		const structural = activeIndex !== lastActiveIndex || windowKey !== lastWindowKey;
+		lastActiveIndex = activeIndex;
+		lastWindowKey = windowKey;
+		if (structural) {
+			recordActivePane(sessionName);
+			requestProbe();
+		}
 	});
 
 	syncMaxTimer = setTimeout(finishSync, syncMaxMs);

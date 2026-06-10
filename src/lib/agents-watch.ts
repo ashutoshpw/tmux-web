@@ -190,6 +190,19 @@ export async function probeWatchedPanes(): Promise<AgentStatus[]> {
 
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 let cache: AgentStatus[] = [];
+let lastProbeAt = 0;
+let pendingProbe: ReturnType<typeof setTimeout> | null = null;
+
+/** Floor between event-driven probes, shared with the timer. Coalesces bursts
+ * (e.g. many sessions switching windows at once) into one probe per window. */
+const MIN_PROBE_INTERVAL_MS = 1500;
+
+function runProbe(): void {
+	lastProbeAt = Date.now();
+	probeWatchedPanes()
+		.then((r) => { cache = r; })
+		.catch(() => { /* keep last cache */ });
+}
 
 /** Latest cached snapshot from the background watcher (empty if not running). */
 export function getCachedAgentStatuses(): AgentStatus[] {
@@ -201,18 +214,36 @@ export function isBackgroundWatchRunning(): boolean {
 }
 
 /**
+ * Request an out-of-band probe in response to a structural tmux event (a window
+ * added, or the active window switched — places a new agent could appear).
+ *
+ * Globally throttled to one probe per {@link MIN_PROBE_INTERVAL_MS}, regardless
+ * of how many sessions fire events, so this never spikes under load. No-op when
+ * the background watcher isn't running: without a warm cache nothing reads the
+ * result between requests, and on-demand `/api/agents` already probes fresh.
+ */
+export function requestProbe(): void {
+	if (!watchTimer || pendingProbe) return;
+	const since = Date.now() - lastProbeAt;
+	if (since >= MIN_PROBE_INTERVAL_MS) {
+		runProbe();
+		return;
+	}
+	pendingProbe = setTimeout(() => {
+		pendingProbe = null;
+		runProbe();
+	}, MIN_PROBE_INTERVAL_MS - since);
+	if (typeof pendingProbe.unref === 'function') pendingProbe.unref();
+}
+
+/**
  * Start the background watcher. Runs one probe immediately, then every
  * `intervalMs`, caching the result. Idempotent.
  */
 export function startBackgroundWatch(intervalMs = 3500): void {
 	if (watchTimer) return;
-	const run = () => {
-		probeWatchedPanes()
-			.then((r) => { cache = r; })
-			.catch(() => { /* keep last cache */ });
-	};
-	run();
-	watchTimer = setInterval(run, intervalMs);
+	runProbe();
+	watchTimer = setInterval(runProbe, intervalMs);
 	// Don't keep the process alive solely for this timer.
 	if (typeof watchTimer.unref === 'function') watchTimer.unref();
 }
@@ -221,6 +252,10 @@ export function stopBackgroundWatch(): void {
 	if (watchTimer) {
 		clearInterval(watchTimer);
 		watchTimer = null;
+	}
+	if (pendingProbe) {
+		clearTimeout(pendingProbe);
+		pendingProbe = null;
 	}
 	cache = [];
 }

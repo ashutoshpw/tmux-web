@@ -56,6 +56,8 @@ import {
 } from "./lib/tmux-capture.js";
 import { readTerminalBufferConfig } from "./lib/terminal-config.js";
 import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
+import { listImageUploadProcessors, processImageUpload } from "./lib/upload-processor.js";
+import { listUploadProcessingLogs } from "./lib/upload-processing-logs.js";
 import {
 	listSessionWindows,
 	selectSessionWindow,
@@ -101,6 +103,11 @@ const DEFAULT_SCHEDULE_HISTORY_DAYS = 7;
 function clampHistoryDays(value: number | undefined): number {
 	if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SCHEDULE_HISTORY_DAYS;
 	return Math.min(365, Math.max(1, Math.round(value)));
+}
+
+function clampUploadQuality(value: number | undefined): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) return 85;
+	return Math.min(100, Math.max(1, Math.round(value)));
 }
 
 const startupArgs = process.argv.slice(2);
@@ -182,6 +189,7 @@ db.data.pinnedViews ??= [];
 db.data.watchedPanes ??= [];
 db.data.triggeredTasks ??= [];
 db.data.quickCommands ??= [];
+db.data.uploadProcessingLogs ??= [];
 
 const settings = await readSettings();
 const activeTheme = await readActiveTheme();
@@ -420,6 +428,8 @@ app.get("/settings", async (c) => {
 		rendererOverridden: terminalRenderer !== savedRenderer,
 		theme: activeTheme,
 		plugins: current.plugins ?? [],
+		imageUploadProcessors: listImageUploadProcessors(extensions),
+		uploadProcessingLogs: listUploadProcessingLogs(),
 		saved: c.req.query("saved") === "1",
 		error: c.req.query("error") ? decodeURIComponent(c.req.query("error")!) : undefined,
 	}));
@@ -439,6 +449,13 @@ app.post("/settings", async (c) => {
 	if (timezone && !isValidTimeZone(timezone)) {
 		return c.redirect("/settings?error=" + encodeURIComponent(INVALID_TIMEZONE_MESSAGE), 303);
 	}
+	const processorExtensionId = typeof body.imageUploadProcessorExtensionId === "string"
+		? body.imageUploadProcessorExtensionId.trim()
+		: "";
+	const processorFormat = body.imageUploadProcessorFormat === "jpeg" ? "jpeg" : "webp";
+	const processorQuality = clampUploadQuality(
+		typeof body.imageUploadProcessorQuality === "string" ? Number(body.imageUploadProcessorQuality) : undefined,
+	);
 
 	await writeSettings({
 		...current,
@@ -450,6 +467,13 @@ app.post("/settings", async (c) => {
 		scheduleHistoryDays: historyDays,
 		scheduleTimezone: timezone || undefined,
 		scheduleAbsoluteTime: body.scheduleAbsoluteTime !== undefined,
+		imageUploadProcessor: processorExtensionId
+			? {
+				extensionId: processorExtensionId,
+				format: processorFormat,
+				quality: processorQuality,
+			}
+			: undefined,
 	});
 	return c.redirect("/settings?saved=1", 303);
 });
@@ -676,7 +700,20 @@ app.post("/api/session/:session/upload", async (c) => {
 	try {
 		const arrayBuffer = await file.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
-		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined, file.name || undefined);
+		const declaredMime = file.type || undefined;
+		const processed = await processImageUpload({
+			sessionName: session,
+			data: buffer,
+			mime: declaredMime ?? "",
+			filename: file.name,
+			settings: settings.imageUploadProcessor,
+			extensions,
+		});
+		const { path: filePath } = await saveUploadedImage(
+			processed.data,
+			processed.mime || undefined,
+			file.name || undefined,
+		);
 		return c.json({ path: filePath });
 	} catch (err) {
 		if (err instanceof ImageUploadError) {

@@ -1,0 +1,17 @@
+{
+  "name": "Image Compressor",
+  "icon": "▣",
+  "slot": "background",
+  "permissions": [],
+  "views": [],
+  "start": "node dist/backend/server.js",
+  "config": {
+    "minBytes": 262144
+  },
+  "capabilities": {
+    "imageUploadProcessor": {
+      "endpoint": "/image-upload/process",
+      "timeoutMs": 10000
+    }
+  }
+}

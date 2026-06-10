@@ -85,6 +85,19 @@ export interface QuickCommandRecord {
 	updatedAt: number;
 }
 
+export interface UploadProcessingLogRecord {
+	id: string;
+	timestamp: number;
+	sessionName: string;
+	extensionId: string;
+	status: 'processed' | 'unchanged' | 'fallback';
+	inputMime: string;
+	inputBytes: number;
+	outputMime?: string;
+	outputBytes?: number;
+	error?: string;
+}
+
 export interface DbSchema {
 	notes: NoteRecord[];
 	scheduledTasks: StoredTask[];
@@ -96,6 +109,7 @@ export interface DbSchema {
 	sessionWindows: SessionWindowsRecord[];
 	windowHistory: WindowHistoryRecord[];
 	quickCommands: QuickCommandRecord[];
+	uploadProcessingLogs: UploadProcessingLogRecord[];
 }
 
 const dbDir = getDataRoot();
@@ -103,5 +117,5 @@ mkdirSync(dbDir, { recursive: true });
 
 export const db = new Low<DbSchema>(
 	new JSONFile<DbSchema>(join(dbDir, 'db.json')),
-	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], pinnedViews: [], watchedPanes: [], windowLabels: [], sessionWindows: [], windowHistory: [], quickCommands: [] },
+	{ notes: [], scheduledTasks: [], triggeredTasks: [], sessionAccess: [], pinnedViews: [], watchedPanes: [], windowLabels: [], sessionWindows: [], windowHistory: [], quickCommands: [], uploadProcessingLogs: [] },
 );

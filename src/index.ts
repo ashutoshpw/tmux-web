@@ -29,7 +29,7 @@ import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, rende
 import { db } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
-import { SchedulerService, isValidScheduleInput } from "./lib/scheduler.js";
+import { SchedulerService, isValidScheduleInput, isValidRescheduleInput } from "./lib/scheduler.js";
 import { handleClientMessage } from "./lib/ws-message.js";
 import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
@@ -639,6 +639,15 @@ app.delete("/api/schedule/:id", async (c) => {
 	const deleted = await scheduler.delete(c.req.param("id"));
 	if (!deleted) return c.json({ error: "not found" }, 404);
 	return c.json({ ok: true });
+});
+
+app.patch("/api/schedule/:id", async (c) => {
+	let body: unknown;
+	try { body = await c.req.json(); } catch { return c.json({ error: "invalid json" }, 400); }
+	if (!isValidRescheduleInput(body)) return c.json({ error: "invalid body" }, 400);
+	const updated = await scheduler.reschedule(c.req.param("id"), (body as { delayMs: number }).delayMs);
+	if (!updated) return c.json({ error: "not found" }, 404);
+	return c.json({ id: updated.id, fireAt: updated.fireAt });
 });
 
 // ── WebSocket server ───────────────────────────────────────────────────────

@@ -72,8 +72,24 @@ export function renderScheduleIndex(
     <span class="countdown" data-fire-at="${t.fireAt}">…</span>
   </div>
   <div class="task-row2">
-    <span class="meta">win:${t.windowIndex} &middot; fires ${escapeHtml(formatFireAt(t.fireAt))}</span>
-    <button class="cancel-btn" data-id="${escapeHtml(t.id)}">cancel</button>
+    <span class="meta"><a class="win-link" href="/s/${encodeURIComponent(t.sessionName)}?window=${t.windowIndex}">win:${t.windowIndex}</a> &middot; fires ${escapeHtml(formatFireAt(t.fireAt))}</span>
+    <div style="display:flex;gap:4px;align-items:center;">
+      <button class="reschedule-btn" data-id="${escapeHtml(t.id)}">reschedule</button>
+      <button class="cancel-btn" data-id="${escapeHtml(t.id)}">cancel</button>
+    </div>
+  </div>
+  <div class="reschedule-row" data-id="${escapeHtml(t.id)}">
+    <div class="reschedule-presets">
+      <button class="reschedule-preset-btn" data-delay="1m">1m</button>
+      <button class="reschedule-preset-btn" data-delay="5m">5m</button>
+      <button class="reschedule-preset-btn" data-delay="15m">15m</button>
+      <button class="reschedule-preset-btn" data-delay="1h">1h</button>
+    </div>
+    <div class="reschedule-input-row">
+      <input class="reschedule-input" type="text" placeholder="1h, 5m, 30s, 1m30s" autocomplete="off" />
+      <button class="reschedule-confirm-btn">Set</button>
+      <span class="reschedule-error"></span>
+    </div>
   </div>
 </div>`).join('\n');
 		return `<div class="session-group" data-session="${escapeHtml(session)}">
@@ -135,12 +151,48 @@ export function renderScheduleIndex(
   .task .countdown.imminent { color: #cc6666; }
   .task-row2 { display: flex; justify-content: space-between; align-items: center; }
   .task .meta { font-size: 11px; color: var(--panel-muted); }
+  .win-link { color: var(--panel-accent); text-decoration: none; }
+  .win-link:hover { text-decoration: underline; }
   .cancel-btn {
     font-size: 10px; color: var(--panel-muted); background: none;
     border: 1px solid var(--panel-border); padding: 2px 10px; border-radius: 4px;
     cursor: pointer; font-family: inherit; transition: all 0.15s;
   }
   .cancel-btn:hover { border-color: #cc6666; color: #cc6666; }
+  .reschedule-btn {
+    font-size: 10px; color: var(--panel-muted); background: none;
+    border: 1px solid var(--panel-border); padding: 2px 10px; border-radius: 4px;
+    cursor: pointer; font-family: inherit; transition: all 0.15s; margin-right: 4px;
+  }
+  .reschedule-btn:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  .reschedule-row {
+    display: none; flex-direction: column; gap: 6px;
+    padding-top: 8px; border-top: 1px solid var(--panel-border);
+  }
+  .reschedule-row.active { display: flex; }
+  .reschedule-presets { display: flex; gap: 6px; }
+  .reschedule-preset-btn {
+    font-size: 11px; color: var(--panel-muted); background: none;
+    border: 1px solid var(--panel-border); padding: 3px 10px; border-radius: 6px;
+    cursor: pointer; font-family: inherit; transition: all 0.15s;
+  }
+  .reschedule-preset-btn:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  .reschedule-input-row { display: flex; gap: 8px; align-items: center; }
+  .reschedule-input {
+    flex: 1; background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border);
+    color: var(--page-fg); font-family: inherit; font-size: 12px;
+    padding: 4px 8px; border-radius: 6px; outline: none; transition: border-color 0.15s;
+  }
+  .reschedule-input:focus { border-color: rgba(125,211,252,0.4); }
+  .reschedule-input.error { border-color: #cc6666; }
+  .reschedule-confirm-btn {
+    font-size: 11px; background: rgba(115,201,145,0.12);
+    border: 1px solid var(--panel-success); color: var(--panel-success);
+    padding: 4px 14px; border-radius: 6px; cursor: pointer; font-family: inherit;
+  }
+  .reschedule-confirm-btn:hover { background: rgba(115,201,145,0.22); }
+  .reschedule-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .reschedule-error { font-size: 11px; color: #cc6666; }
   .tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--panel-border); margin-bottom: 20px; }
   .tab {
     font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
@@ -250,23 +302,141 @@ function refreshEmptyState() {
   }
 }
 
-document.getElementById('schedule-list').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.cancel-btn');
-  if (!btn) return;
-  const id = btn.dataset.id;
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/schedule/' + id, { method: 'DELETE' });
-    if (res.ok) {
-      const task = document.querySelector('.task[data-id="' + id + '"]');
-      if (task) task.remove();
-      refreshEmptyState();
-    } else {
-      btn.disabled = false;
-    }
-  } catch {
-    btn.disabled = false;
+function parseDelay(str) {
+  str = (str || '').trim().toLowerCase();
+  if (!str) return null;
+  const m = str.match(/^(?:(\\d+)h)?(?:(\\d+)m)?(?:(\\d+)s)?$/);
+  if (!m || (!m[1] && !m[2] && !m[3])) return null;
+  const ms = ((parseInt(m[1]||'0')*3600)+(parseInt(m[2]||'0')*60)+parseInt(m[3]||'0'))*1000;
+  return ms > 0 ? ms : null;
+}
+
+function openReschedule(id) {
+  document.querySelectorAll('.reschedule-row.active').forEach((r) => {
+    if (r.dataset.id !== id) closeReschedule(r.dataset.id);
+  });
+  const row = document.querySelector('.reschedule-row[data-id="' + id + '"]');
+  if (!row) return;
+  row.classList.add('active');
+  const input = row.querySelector('.reschedule-input');
+  input.value = ''; input.classList.remove('error');
+  row.querySelector('.reschedule-error').textContent = '';
+  input.focus();
+}
+
+function closeReschedule(id) {
+  const row = document.querySelector('.reschedule-row[data-id="' + id + '"]');
+  if (!row) return;
+  row.classList.remove('active');
+  const input = row.querySelector('.reschedule-input');
+  input.value = ''; input.classList.remove('error');
+  row.querySelector('.reschedule-error').textContent = '';
+}
+
+async function submitReschedule(id, delayStr) {
+  const row = document.querySelector('.reschedule-row[data-id="' + id + '"]');
+  if (!row) return;
+  const input = row.querySelector('.reschedule-input');
+  const errorEl = row.querySelector('.reschedule-error');
+  const confirmBtn = row.querySelector('.reschedule-confirm-btn');
+  const delayMs = parseDelay(delayStr !== undefined ? delayStr : input.value);
+  if (!delayMs) {
+    input.classList.add('error');
+    errorEl.textContent = 'Use: 1h, 5m, 30s, 1m30s';
+    input.focus();
+    return;
   }
+  input.classList.remove('error'); errorEl.textContent = '';
+  confirmBtn.disabled = true;
+  try {
+    const res = await fetch('/api/schedule/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delayMs }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errorEl.textContent = err.error || 'Server error.';
+      confirmBtn.disabled = false;
+      return;
+    }
+    const data = await res.json();
+    const task = document.querySelector('.task[data-id="' + id + '"]');
+    if (task) {
+      const countdown = task.querySelector('.countdown');
+      if (countdown) countdown.dataset.fireAt = String(data.fireAt);
+      const meta = task.querySelector('.meta');
+      if (meta) {
+        const d = new Date(data.fireAt);
+        const win = (meta.textContent.match(/win:(\d+)/) || ['','?'])[1];
+        const time = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        meta.textContent = 'win:' + win + ' · fires ' + time;
+      }
+    }
+    closeReschedule(id);
+  } catch {
+    errorEl.textContent = 'Network error.';
+    confirmBtn.disabled = false;
+  }
+}
+
+document.getElementById('schedule-list').addEventListener('click', async (e) => {
+  const cancelBtn = e.target.closest('.cancel-btn');
+  if (cancelBtn) {
+    const id = cancelBtn.dataset.id;
+    cancelBtn.disabled = true;
+    try {
+      const res = await fetch('/api/schedule/' + id, { method: 'DELETE' });
+      if (res.ok) {
+        const task = document.querySelector('.task[data-id="' + id + '"]');
+        if (task) task.remove();
+        refreshEmptyState();
+      } else {
+        cancelBtn.disabled = false;
+      }
+    } catch {
+      cancelBtn.disabled = false;
+    }
+    return;
+  }
+
+  const rescheduleBtn = e.target.closest('.reschedule-btn');
+  if (rescheduleBtn) {
+    const id = rescheduleBtn.dataset.id;
+    const row = document.querySelector('.reschedule-row[data-id="' + id + '"]');
+    if (row && row.classList.contains('active')) closeReschedule(id);
+    else openReschedule(id);
+    return;
+  }
+
+  const confirmBtn = e.target.closest('.reschedule-confirm-btn');
+  if (confirmBtn) {
+    const row = confirmBtn.closest('.reschedule-row');
+    if (row) await submitReschedule(row.dataset.id);
+    return;
+  }
+
+  const presetBtn = e.target.closest('.reschedule-preset-btn');
+  if (presetBtn) {
+    const row = presetBtn.closest('.reschedule-row');
+    if (row) await submitReschedule(row.dataset.id, presetBtn.dataset.delay);
+    return;
+  }
+});
+
+document.getElementById('schedule-list').addEventListener('keydown', (e) => {
+  const input = e.target.closest('.reschedule-input');
+  if (!input) return;
+  const row = input.closest('.reschedule-row');
+  if (!row) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeReschedule(row.dataset.id); }
+  else if (e.key === 'Enter') { e.preventDefault(); void submitReschedule(row.dataset.id); }
+});
+
+document.getElementById('schedule-list').addEventListener('focusout', (e) => {
+  const row = e.target.closest('.reschedule-row');
+  if (!row || row.contains(e.relatedTarget)) return;
+  closeReschedule(row.dataset.id);
 });
 
 tick();

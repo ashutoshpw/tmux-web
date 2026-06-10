@@ -38,6 +38,12 @@ export function sendTmuxKeys(sessionName: string, windowIndex: number, text: str
 	execFileSync('tmux', ['send-keys', '-t', target, 'Enter'], { timeout: 5000 });
 }
 
+export function isValidRescheduleInput(input: unknown): input is { delayMs: number } {
+	if (!input || typeof input !== 'object') return false;
+	const body = input as Record<string, unknown>;
+	return typeof body.delayMs === 'number' && body.delayMs >= 1 && body.delayMs <= 86_400_000;
+}
+
 export function isValidScheduleInput(input: unknown): input is ScheduleTaskInput {
 	if (!input || typeof input !== 'object') return false;
 	const body = input as Record<string, unknown>;
@@ -149,6 +155,18 @@ export class SchedulerService {
 		this.deps.db.data.scheduledTasks.push(task);
 		await this.deps.db.write();
 		return task;
+	}
+
+	async reschedule(id: string, delayMs: number): Promise<StoredTask | null> {
+		const task = this.scheduledTasks.get(id);
+		if (!task) return null;
+		this.clearTimer(task.timeoutHandle);
+		const updatedTask: StoredTask = { ...task, fireAt: this.now() + delayMs };
+		this.scheduleExisting(updatedTask, delayMs);
+		const idx = this.deps.db.data.scheduledTasks.findIndex((t) => t.id === id);
+		if (idx >= 0) this.deps.db.data.scheduledTasks[idx] = updatedTask;
+		await this.deps.db.write();
+		return updatedTask;
 	}
 
 	async delete(id: string): Promise<boolean> {

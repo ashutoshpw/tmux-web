@@ -149,10 +149,10 @@ export function renderTerminal(
 	};
 	const scrollback = terminalCfg.initialLines + 2 * terminalCfg.historyChunk;
 	const commandbarActions: CommandbarAction[] = [
+		{ label: 'Switch window', meta: `Windows in ${sessionName}`, subView: 'windows' },
 		{ label: 'Open sessions sidebar', meta: 'Recent and pinned sessions', clickTargetId: 'sessions-toggle' },
 		{ label: 'Open notes', meta: `Notes for ${sessionName}`, clickTargetId: 'notes-toggle' },
 		{ label: 'Open scheduler', meta: `Schedule command in ${sessionName}`, clickTargetId: 'sched-toggle' },
-		{ label: 'Switch window', meta: `Windows in ${sessionName}`, clickTargetId: 'windows-toggle' },
 	];
 	if (agentsEnabled) {
 		commandbarActions.push({ label: 'View All Agents', meta: 'Running agents', href: '/agents' });
@@ -314,7 +314,7 @@ ${sessionsDrawerScript(sessionName)}
 ${mobileToolbarScript(sessionName)}
 
 // ========== COMMANDBAR ==========
-${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions) : ''}
+${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions, { sessionName }) : ''}
 
 // ========== NOTES ==========
 // (notes and scheduler scripts already included above — extensions below)

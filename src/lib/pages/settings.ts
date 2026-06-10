@@ -3,6 +3,7 @@ import { getThemeTemplates, THEME_TEMPLATE_IDS } from '../themes/index.js';
 import type { TmuxWebTheme } from '../themes/types.js';
 import type { TmuxWebSettings } from '../settings.js';
 import { GITHUB_ACTIONS_PKG } from '../setup-features.js';
+import type { UploadProcessingLogRecord } from '../db.js';
 
 function escapeHtml(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -71,16 +72,22 @@ function pageHead(title: string, theme: TmuxWebTheme): string {
     background: var(--page-bg); border: 1px solid var(--panel-border);
     border-radius: 6px; padding: 7px 10px;
   }
-  .plugin-add input[type=text]:focus { outline: none; border-color: var(--panel-accent); }
-  .num-input {
-    width: 90px; font-size: 12px; font-family: inherit; color: var(--page-fg);
-    background: var(--page-bg); border: 1px solid var(--panel-border);
-    border-radius: 6px; padding: 7px 10px;
-  }
-  .num-input:focus { outline: none; border-color: var(--panel-accent); }
-  .suggest { font-size: 11px; color: var(--panel-muted); margin-top: 8px; }
-  .suggest button { background: none; border: none; color: var(--panel-accent); cursor: pointer; font: inherit; font-size: 11px; padding: 0; text-decoration: underline; }
-  .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+	  .plugin-add input[type=text]:focus { outline: none; border-color: var(--panel-accent); }
+	  .num-input, .select-input {
+	    width: 90px; font-size: 12px; font-family: inherit; color: var(--page-fg);
+	    background: var(--page-bg); border: 1px solid var(--panel-border);
+	    border-radius: 6px; padding: 7px 10px;
+	  }
+	  .select-input { width: 100%; max-width: 360px; }
+	  .num-input:focus, .select-input:focus { outline: none; border-color: var(--panel-accent); }
+	  .suggest { font-size: 11px; color: var(--panel-muted); margin-top: 8px; }
+	  .suggest button { background: none; border: none; color: var(--panel-accent); cursor: pointer; font: inherit; font-size: 11px; padding: 0; text-decoration: underline; }
+	  .log-table { width: 100%; border-collapse: collapse; font-size: 11px; color: var(--panel-muted); }
+	  .log-table th { text-align: left; color: var(--panel-accent); font-weight: 600; border-bottom: 1px solid var(--panel-border); padding: 5px 4px; }
+	  .log-table td { border-bottom: 1px solid var(--panel-border); padding: 5px 4px; vertical-align: top; }
+	  .log-table td:last-child { word-break: break-word; }
+	  .processor-fields { display: flex; flex-direction: column; gap: 10px; }
+	  .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .theme-card {
     border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px;
     cursor: pointer; transition: border-color 0.15s; background: var(--panel-bg);
@@ -110,16 +117,23 @@ export function renderSettings(opts: {
 	rendererOverridden: boolean;
 	theme: TmuxWebTheme;
 	plugins: string[];
+	imageUploadProcessors?: Array<{ id: string; name: string }>;
+	uploadProcessingLogs?: UploadProcessingLogRecord[];
 	saved?: boolean;
 	error?: string;
 }): string {
-	const { settings, renderer, rendererOverridden, theme, plugins, saved = false, error } = opts;
+	const { settings, renderer, rendererOverridden, theme, plugins, imageUploadProcessors = [], uploadProcessingLogs = [], saved = false, error } = opts;
 	const commandbarOn = settings.commandbar === true;
 	const agentsOn = settings.agents === true;
 	const agentsBackgroundWatchOn = settings.agentsBackgroundWatch === true;
 	const savedRenderer = settings.terminalRenderer ?? 'xterm';
 	const defaultView = settings.defaultView ?? 'default';
 	const scheduleHistoryDays = settings.scheduleHistoryDays ?? 7;
+	const processor = settings.imageUploadProcessor;
+	const selectedProcessorId = processor?.extensionId ?? '';
+	const selectedProcessorLoaded = selectedProcessorId && imageUploadProcessors.some((p) => p.id === selectedProcessorId);
+	const processorFormat = processor?.format === 'jpeg' ? 'jpeg' : 'webp';
+	const processorQuality = typeof processor?.quality === 'number' ? processor.quality : 85;
 
 	const pluginRows = plugins.length
 		? plugins.map((p) => `<div class="plugin-row">
@@ -135,6 +149,31 @@ export function renderSettings(opts: {
 	const suggestGithub = !plugins.includes(GITHUB_ACTIONS_PKG)
 		? `<p class="suggest">Suggested: <button type="button" onclick="document.getElementById('pkg-input').value='${GITHUB_ACTIONS_PKG}'">${GITHUB_ACTIONS_PKG}</button> (sidebar CI status)</p>`
 		: '';
+
+	const processorOptions = [
+		`<option value="">Disabled</option>`,
+		selectedProcessorId && !selectedProcessorLoaded
+			? `<option value="${escapeHtml(selectedProcessorId)}" selected>${escapeHtml(selectedProcessorId)} (not loaded)</option>`
+			: '',
+		...imageUploadProcessors.map((p) =>
+			`<option value="${escapeHtml(p.id)}" ${selectedProcessorId === p.id ? 'selected' : ''}>${escapeHtml(p.name)} (${escapeHtml(p.id)})</option>`),
+	].join('');
+
+	const uploadLogRows = uploadProcessingLogs.length
+		? uploadProcessingLogs.map((log) => {
+			const bytes = log.outputBytes !== undefined
+				? `${log.inputBytes} → ${log.outputBytes}`
+				: String(log.inputBytes);
+			const detail = log.error ?? `${log.inputMime}${log.outputMime ? ` → ${log.outputMime}` : ''}`;
+			return `<tr>
+	      <td>${escapeHtml(new Date(log.timestamp).toLocaleString())}</td>
+	      <td>${escapeHtml(log.status)}</td>
+	      <td>${escapeHtml(log.extensionId)}</td>
+	      <td>${escapeHtml(bytes)}</td>
+	      <td>${escapeHtml(detail)}</td>
+	    </tr>`;
+		}).join('\n')
+		: `<tr><td colspan="5">No upload processing events yet.</td></tr>`;
 
 	return /* html */ `${pageHead('Settings', theme)}
 <body>
@@ -184,15 +223,33 @@ export function renderSettings(opts: {
       </div>
     </div>
 
-    <div class="section">
-      <h2>Schedule history</h2>
-      <p class="desc">Days to keep the <code>/schedule</code> "Recently Triggered" history (fired &amp; missed tasks). 1–365, default 7.</p>
-      <label class="row"><input type="number" class="num-input" name="scheduleHistoryDays" min="1" max="365" value="${scheduleHistoryDays}" /> days</label>
-    </div>
+	    <div class="section">
+	      <h2>Schedule history</h2>
+	      <p class="desc">Days to keep the <code>/schedule</code> "Recently Triggered" history (fired &amp; missed tasks). 1–365, default 7.</p>
+	      <label class="row"><input type="number" class="num-input" name="scheduleHistoryDays" min="1" max="365" value="${scheduleHistoryDays}" /> days</label>
+	    </div>
 
-    <div class="form-actions">
-      <button type="submit" class="btn primary">Save settings</button>
-    </div>
+	    <div class="section">
+	      <h2>Image uploads</h2>
+	      <p class="desc">Optional background processing for pasted or dragged images before tmux-web saves the host file path.</p>
+	      <div class="processor-fields">
+	        <label class="row" style="align-items:flex-start;flex-direction:column">
+	          Processor
+	          <select class="select-input" name="imageUploadProcessorExtensionId">
+	            ${processorOptions}
+	          </select>
+	        </label>
+	        <div class="radios">
+	          <label class="row"><input type="radio" name="imageUploadProcessorFormat" value="webp" ${processorFormat === 'webp' ? 'checked' : ''} /> WebP</label>
+	          <label class="row"><input type="radio" name="imageUploadProcessorFormat" value="jpeg" ${processorFormat === 'jpeg' ? 'checked' : ''} /> JPEG</label>
+	        </div>
+	        <label class="row"><input type="number" class="num-input" name="imageUploadProcessorQuality" min="1" max="100" value="${processorQuality}" /> quality</label>
+	      </div>
+	    </div>
+
+	    <div class="form-actions">
+	      <button type="submit" class="btn primary">Save settings</button>
+	    </div>
   </form>
 
   <div class="section" style="margin-top:16px">
@@ -207,13 +264,22 @@ export function renderSettings(opts: {
     ${suggestGithub}
   </div>
 
-  <div class="section">
-    <h2>Theme</h2>
-    <p class="desc">Shell chrome + terminal colors.</p>
-    <a href="/settings/theme" class="btn" style="display:inline-block;text-decoration:none">Customize theme →</a>
-  </div>
-</div>
-</body>
+	  <div class="section">
+	    <h2>Theme</h2>
+	    <p class="desc">Shell chrome + terminal colors.</p>
+	    <a href="/settings/theme" class="btn" style="display:inline-block;text-decoration:none">Customize theme →</a>
+	  </div>
+
+	  <div class="section">
+	    <h2>Upload processing log</h2>
+	    <p class="desc">Recent image processor attempts. Compression failures fall back to the original image.</p>
+	    <table class="log-table">
+	      <thead><tr><th>Time</th><th>Status</th><th>Extension</th><th>Bytes</th><th>Detail</th></tr></thead>
+	      <tbody>${uploadLogRows}</tbody>
+	    </table>
+	  </div>
+	</div>
+	</body>
 </html>`;
 }
 

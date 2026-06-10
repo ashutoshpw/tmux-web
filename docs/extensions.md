@@ -139,11 +139,12 @@ dist/
 | Field | Purpose |
 | --- | --- |
 | `name`, `icon` | Shown in the sidebar header |
-| `slot` | Only `sidebar` is implemented today |
+| `slot` | `sidebar` for drawer UI, or `background` for backend-only capabilities |
 | `permissions` | Documentary — not enforced yet |
 | `views[].entry` | The HTML entry point inside `dist/ui/` |
 | `start` | Command tmux-web runs (cwd = extension dir) |
 | `config` | Arbitrary JSON passed to the UI via `ext.onConfig()` |
+| `capabilities` | Optional backend capabilities such as image upload processing |
 
 There is **no `id` field** — the id is derived from `package.json`'s `name`, with any `@scope/` prefix stripped. So `@tmux-web/ext-github-actions` → id is `ext-github-actions`. This becomes the URL prefix (`/ext/ext-github-actions/...`), the socket name, and the data-dir name. Renaming the npm package is the only renaming needed.
 
@@ -243,6 +244,28 @@ What the SDK gives you:
 
 `ext.request()` calls are same-origin (the host is serving them), so no CORS dance and no token plumbing — they just land at your backend over the Unix socket.
 
+### Background upload processors
+
+Extensions can process dragged or pasted images before tmux-web writes the final host file. Use `slot: "background"` and declare an image upload processor capability:
+
+```json
+{
+  "name": "Image Compressor",
+  "icon": "▣",
+  "slot": "background",
+  "views": [],
+  "start": "node dist/backend/server.js",
+  "capabilities": {
+    "imageUploadProcessor": {
+      "endpoint": "/image-upload/process",
+      "timeoutMs": 10000
+    }
+  }
+}
+```
+
+Users must explicitly select the processor in `/settings`; installing an extension does not change uploads on its own. The host posts the raw image bytes to the endpoint over the extension Unix socket. Request headers include `Content-Type`, `X-Tmux-Web-Upload-Session`, `X-Tmux-Web-Upload-Filename`, `X-Tmux-Web-Upload-Format`, and `X-Tmux-Web-Upload-Quality`. Return raw image bytes with a valid image `Content-Type`. If the processor fails, times out, or returns invalid image bytes, tmux-web logs the failure and saves the original image.
+
 ### Architecture in one diagram
 
 ```
@@ -293,4 +316,5 @@ tmux-web add @yourscope/your-extension
 
 | Extension | Guide |
 | --- | --- |
+| `@tmux-web/ext-image-compressor` | Background image upload compression via `sharp` |
 | `@tmux-web/ext-git-workflow` | [Git Workflow](extensions/git-workflow.md) — git status, worktree handoff, commit/push |

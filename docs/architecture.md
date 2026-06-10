@@ -45,10 +45,12 @@ WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; cl
 
 CLI tools that accept pasted images expect a **file on the host**, not inline terminal graphics. tmux-web bridges the browser clipboard or drag-and-drop:
 
-1. **Upload** — `POST /api/session/:session/upload` saves the image under `{dataRoot}/uploads/YYYY-MM-DD/{uuid}.{ext}` (PNG, JPEG, WebP, or GIF; UUID filename only).
+1. **Upload** — `POST /api/session/:session/upload` validates the image, optionally passes it through the configured image upload processor extension, then saves it under `{dataRoot}/uploads/YYYY-MM-DD/{uuid}.{ext}` (PNG, JPEG, WebP, or GIF; UUID filename only).
 2. **Inject path** — The absolute path is sent into the pane via WebSocket `input`, as if typed, so the app can attach it (e.g. `[Image #1]` in Claude Code).
 
 Paste (Cmd/Ctrl+V) prefers clipboard images over plain text when both are present. Drag an image onto the terminal canvas to upload the same way.
+
+Image upload processing is disabled by default. Enable a background extension such as `@tmux-web/ext-image-compressor` from `/settings`; processor failures are logged and fall back to saving the original image.
 
 | Environment variable | Default | Purpose |
 |---------------------|---------|---------|

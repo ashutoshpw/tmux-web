@@ -7,6 +7,11 @@ export interface TmuxWebSettings {
 	commandbar?: boolean;
 	terminalRenderer?: 'xterm' | 'ghostty';
 	defaultView?: 'default' | 'recent';
+	imageUploadProcessor?: {
+		extensionId?: string;
+		format?: 'webp' | 'jpeg';
+		quality?: number;
+	};
 	/** Enable the /agents page that watches AI agents in recently-viewed panes. */
 	agents?: boolean;
 	/** Probe watched panes on a background interval (even when /agents is closed). */

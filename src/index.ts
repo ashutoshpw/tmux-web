@@ -29,7 +29,7 @@ import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, rende
 import { db } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
-import { SchedulerService, isValidScheduleInput } from "./lib/scheduler.js";
+import { SchedulerService, isValidScheduleInput, isValidRescheduleInput } from "./lib/scheduler.js";
 import { handleClientMessage } from "./lib/ws-message.js";
 import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
@@ -50,11 +50,14 @@ import {
 	toCrlf,
 } from "./lib/tmux-capture.js";
 import { readTerminalBufferConfig } from "./lib/terminal-config.js";
-import { ImageUploadError, saveUploadedImage } from "./lib/image-upload.js";
+import { ImageUploadError, saveUploadedImage, validateUploadedImage } from "./lib/image-upload.js";
+import { listImageUploadProcessors, processImageUpload } from "./lib/upload-processor.js";
+import { listUploadProcessingLogs } from "./lib/upload-processing-logs.js";
 import {
 	listSessionWindows,
 	selectSessionWindow,
 	newSessionWindow,
+	newTmuxSession,
 	TmuxWindowsError,
 } from "./lib/tmux-windows.js";
 import { getActivePaneInfo } from "./lib/tmux-panes.js";
@@ -93,6 +96,11 @@ const DEFAULT_SCHEDULE_HISTORY_DAYS = 7;
 function clampHistoryDays(value: number | undefined): number {
 	if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_SCHEDULE_HISTORY_DAYS;
 	return Math.min(365, Math.max(1, Math.round(value)));
+}
+
+function clampUploadQuality(value: number | undefined): number {
+	if (typeof value !== "number" || !Number.isFinite(value)) return 85;
+	return Math.min(100, Math.max(1, Math.round(value)));
 }
 
 const startupArgs = process.argv.slice(2);
@@ -168,6 +176,7 @@ db.data.sessionAccess ??= [];
 db.data.pinnedViews ??= [];
 db.data.watchedPanes ??= [];
 db.data.triggeredTasks ??= [];
+db.data.uploadProcessingLogs ??= [];
 
 const settings = await readSettings();
 const activeTheme = await readActiveTheme();
@@ -308,21 +317,25 @@ app.get("/s/:session", async (c) => {
 });
 
 app.get("/notes", (c) => {
-	return c.html(renderNotesIndex(db.data.notes, activeTheme));
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(listSessions(), getSessionAccessMap()) : [];
+	return c.html(renderNotesIndex(db.data.notes, activeTheme, commandbarEnabled, commandbarSessions, agentsEnabled));
 });
 
 app.get("/notes/:session", (c) => {
 	const session = decodeURIComponent(c.req.param("session"));
-	return c.html(renderNotesPage(session, activeTheme));
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(listSessions(), getSessionAccessMap()) : [];
+	return c.html(renderNotesPage(session, activeTheme, commandbarEnabled, commandbarSessions));
 });
 
 app.get("/schedule", (c) => {
-	return c.html(renderScheduleIndex(scheduler.list(), scheduler.listTriggered(), activeTheme, scheduleHistoryDays));
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(listSessions(), getSessionAccessMap()) : [];
+	return c.html(renderScheduleIndex(scheduler.list(), scheduler.listTriggered(), activeTheme, scheduleHistoryDays, commandbarEnabled, commandbarSessions, agentsEnabled));
 });
 
 app.get("/agents", (c) => {
 	if (!agentsEnabled) return c.redirect("/settings", 303);
-	return c.html(renderAgentsIndex(activeTheme));
+	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(listSessions(), getSessionAccessMap()) : [];
+	return c.html(renderAgentsIndex(activeTheme, commandbarEnabled, commandbarSessions));
 });
 
 app.get("/api/agents", async (c) => {
@@ -344,6 +357,8 @@ app.get("/settings", async (c) => {
 		rendererOverridden: terminalRenderer !== savedRenderer,
 		theme: activeTheme,
 		plugins: current.plugins ?? [],
+		imageUploadProcessors: listImageUploadProcessors(extensions),
+		uploadProcessingLogs: listUploadProcessingLogs(),
 		saved: c.req.query("saved") === "1",
 		error: c.req.query("error") ? decodeURIComponent(c.req.query("error")!) : undefined,
 	}));
@@ -359,6 +374,13 @@ app.post("/settings", async (c) => {
 	const historyDays = clampHistoryDays(
 		typeof body.scheduleHistoryDays === "string" ? Number(body.scheduleHistoryDays) : undefined,
 	);
+	const processorExtensionId = typeof body.imageUploadProcessorExtensionId === "string"
+		? body.imageUploadProcessorExtensionId.trim()
+		: "";
+	const processorFormat = body.imageUploadProcessorFormat === "jpeg" ? "jpeg" : "webp";
+	const processorQuality = clampUploadQuality(
+		typeof body.imageUploadProcessorQuality === "string" ? Number(body.imageUploadProcessorQuality) : undefined,
+	);
 
 	await writeSettings({
 		...current,
@@ -368,6 +390,13 @@ app.post("/settings", async (c) => {
 		terminalRenderer: renderer,
 		defaultView,
 		scheduleHistoryDays: historyDays,
+		imageUploadProcessor: processorExtensionId
+			? {
+				extensionId: processorExtensionId,
+				format: processorFormat,
+				quality: processorQuality,
+			}
+			: undefined,
 	});
 	return c.redirect("/settings?saved=1", 303);
 });
@@ -414,6 +443,46 @@ app.post("/settings/theme", async (c) => {
 app.get("/api/sessions", (c) => {
 	if (!commandbarEnabled) return c.json({ error: "commandbar disabled" }, 404);
 	return c.json(buildCommandbarSessions(listSessions(), getSessionAccessMap()));
+});
+
+app.post("/api/sessions/new", async (c) => {
+	let body: { name?: unknown; dir?: unknown };
+	try { body = await c.req.json(); } catch { return c.json({ error: "invalid json" }, 400); }
+	const name = typeof body.name === "string" ? body.name.trim() : "";
+	if (!name) return c.json({ error: "name is required" }, 400);
+	if (!/^[a-zA-Z0-9_\-. ]+$/.test(name)) return c.json({ error: "name contains invalid characters" }, 400);
+	const dir = typeof body.dir === "string" && body.dir.trim() ? body.dir.trim() : undefined;
+	const existing = listSessions();
+	if (existing.some((s) => s.name === name)) return c.json({ error: "session already exists" }, 409);
+	try {
+		newTmuxSession(name, dir);
+		return c.json({ ok: true });
+	} catch (err) {
+		const msg = err instanceof TmuxWindowsError ? err.message : "failed to create session";
+		return c.json({ error: msg }, 500);
+	}
+});
+
+app.get("/api/fs/list", (c) => {
+	const home = process.env.HOME ?? "/";
+	let rawPath = c.req.query("path") ?? home;
+	if (rawPath.startsWith("~")) rawPath = home + rawPath.slice(1);
+	if (!rawPath.startsWith("/")) rawPath = path.join(home, rawPath);
+	try {
+		const entries = readdirSync(rawPath);
+		const dirs: string[] = [];
+		for (const entry of entries) {
+			if (entry.startsWith(".")) continue;
+			try {
+				const full = path.join(rawPath, entry);
+				if (statSync(full).isDirectory()) dirs.push(full);
+			} catch {}
+			if (dirs.length >= 50) break;
+		}
+		return c.json({ dirs });
+	} catch {
+		return c.json({ dirs: [] });
+	}
 });
 
 function sidebarSessionsPayload(currentSession?: string) {
@@ -536,7 +605,16 @@ app.post("/api/session/:session/upload", async (c) => {
 	try {
 		const arrayBuffer = await file.arrayBuffer();
 		const buffer = Buffer.from(arrayBuffer);
-		const { path: filePath } = await saveUploadedImage(buffer, file.type || undefined);
+		const original = validateUploadedImage(buffer, file.type || undefined);
+		const processed = await processImageUpload({
+			sessionName: session,
+			data: buffer,
+			mime: original.mime,
+			filename: file.name,
+			settings: settings.imageUploadProcessor,
+			extensions,
+		});
+		const { path: filePath } = await saveUploadedImage(processed.data, processed.mime);
 		return c.json({ path: filePath });
 	} catch (err) {
 		if (err instanceof ImageUploadError) {
@@ -639,6 +717,15 @@ app.delete("/api/schedule/:id", async (c) => {
 	const deleted = await scheduler.delete(c.req.param("id"));
 	if (!deleted) return c.json({ error: "not found" }, 404);
 	return c.json({ ok: true });
+});
+
+app.patch("/api/schedule/:id", async (c) => {
+	let body: unknown;
+	try { body = await c.req.json(); } catch { return c.json({ error: "invalid json" }, 400); }
+	if (!isValidRescheduleInput(body)) return c.json({ error: "invalid body" }, 400);
+	const updated = await scheduler.reschedule(c.req.param("id"), (body as { delayMs: number }).delayMs);
+	if (!updated) return c.json({ error: "not found" }, 404);
+	return c.json({ id: updated.id, fireAt: updated.fireAt });
 });
 
 // ── WebSocket server ───────────────────────────────────────────────────────

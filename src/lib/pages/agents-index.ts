@@ -1,30 +1,25 @@
 import { cssVarsStyle } from '../theme.js';
 import type { TmuxWebTheme } from '../themes/types.js';
 import { AGENT_LABELS } from '../agent-detect.js';
+import { commandbarCSS, commandbarHTML, commandbarScript } from '../commandbar.js';
+import type { CommandbarSession } from '../commandbar.js';
+import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
+import {
+	sharedLayoutCSS,
+	sharedHeader,
+	sharedSidebar,
+	newSessionModalHTML,
+	newSessionModalScript,
+} from '../shared-layout.js';
 
-export function renderAgentsIndex(theme: TmuxWebTheme): string {
-	// Static labels are injected so the client can render without a round-trip
-	// for the agent display names.
+export function renderAgentsIndex(
+	theme: TmuxWebTheme,
+	commandbarEnabled = false,
+	commandbarSessions: CommandbarSession[] = [],
+): string {
 	const labels = JSON.stringify(AGENT_LABELS).replace(/</g, '\\u003c');
 
-	return /* html */ `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<title>Agents — tmux-web</title>
-<style>
-  ${cssVarsStyle(theme.shell)}
-  html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
-  .container { max-width: 640px; margin: 60px auto; padding: 0 20px; }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--panel-accent); }
-  .back-link {
-    font-size: 12px; color: var(--panel-muted); text-decoration: none;
-    border: 1px solid var(--panel-border); padding: 6px 14px; border-radius: 6px; transition: all 0.15s;
-  }
-  .back-link:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+	const pageSpecificCSS = `
   .sub { font-size: 11px; color: var(--panel-muted); margin-bottom: 24px; line-height: 1.5; }
   .agent {
     display: flex; align-items: center; gap: 12px; text-decoration: none;
@@ -47,28 +42,47 @@ export function renderAgentsIndex(theme: TmuxWebTheme): string {
   .dot.working { background: var(--panel-success); }
   .dot.blocked { background: #f0c674; }
   .empty { font-size: 13px; color: var(--panel-muted); line-height: 1.6; margin-top: 20px; }
-  .footer-links { margin-top: 24px; display: flex; gap: 10px; }
-  .footer-link {
-    display: inline-block; font-size: 12px; color: var(--panel-muted); text-decoration: none;
-    border: 1px solid var(--panel-border); padding: 6px 14px; border-radius: 6px; transition: all 0.15s;
-  }
-  .footer-link:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  ${commandbarEnabled ? commandbarCSS() : ''}
+  ${notesDrawerCSS()}`;
+
+	return /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<title>Agents — tmux-web</title>
+<style>
+  ${cssVarsStyle(theme.shell)}
+  ${sharedLayoutCSS(pageSpecificCSS)}
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="page-header">
-    <h1>Agents</h1>
-    <a href="/" class="back-link">Back</a>
-  </div>
-  <p class="sub">AI agents in the last panes you viewed. Updates automatically.</p>
-  <div id="agents-list">
-    <p class="empty" id="empty-msg">Loading…</p>
-  </div>
-  <div class="footer-links">
-    <a href="/settings" class="footer-link">Settings</a>
+
+${sharedHeader({ commandbarEnabled, title: 'Agents' })}
+
+<div class="page-wrap">
+  <div class="page-layout">
+    ${sharedSidebar({ activePage: 'agents', agentsEnabled: true, refreshHref: '/agents' })}
+    <main class="main-panel">
+      <p class="sub">AI agents in the last panes you viewed. Updates automatically.</p>
+      <div id="agents-list">
+        <p class="empty" id="empty-msg">Loading…</p>
+      </div>
+    </main>
   </div>
 </div>
+
+${newSessionModalHTML()}
+${commandbarEnabled ? commandbarHTML() : ''}
+${notesDrawerHTML('Notes — Global')}
+
+<script type="module">
+${notesDrawerScript('__global__')}
+${commandbarEnabled ? commandbarScript(commandbarSessions, []) : ''}
+${newSessionModalScript()}
+</script>
+
 <script type="module">
 const LABELS = ${labels};
 

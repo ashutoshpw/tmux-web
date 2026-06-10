@@ -1,6 +1,16 @@
 import { cssVarsStyle } from '../theme.js';
 import type { NoteRecord } from '../db.js';
 import type { TmuxWebTheme } from '../themes/types.js';
+import { commandbarCSS, commandbarHTML, commandbarScript } from '../commandbar.js';
+import type { CommandbarSession } from '../commandbar.js';
+import { notesDrawerCSS, notesDrawerHTML, notesDrawerScript } from '../notes-drawer.js';
+import {
+	sharedLayoutCSS,
+	sharedHeader,
+	sharedSidebar,
+	newSessionModalHTML,
+	newSessionModalScript,
+} from '../shared-layout.js';
 
 function escapeHtml(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -11,7 +21,13 @@ function formatDate(ts: number): string {
 	return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function renderNotesIndex(notes: NoteRecord[], theme: TmuxWebTheme): string {
+export function renderNotesIndex(
+	notes: NoteRecord[],
+	theme: TmuxWebTheme,
+	commandbarEnabled = false,
+	commandbarSessions: CommandbarSession[] = [],
+	agentsEnabled = false,
+): string {
 	const sorted = [...notes].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
 	const cards = sorted.map((n) => {
@@ -31,24 +47,7 @@ export function renderNotesIndex(notes: NoteRecord[], theme: TmuxWebTheme): stri
 		? cards
 		: '<p class="empty">No notes yet.</p>';
 
-	return /* html */ `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-<title>Notes — tmux-web</title>
-<style>
-  ${cssVarsStyle(theme.shell)}
-  html, body { background: var(--page-bg); color: var(--page-fg); min-height: 100%; font-family: 'JetBrains Mono', 'SF Mono', 'Menlo', monospace; }
-  .container { max-width: 640px; margin: 60px auto; padding: 0 20px; }
-  .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
-  h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--panel-accent); }
-  .back-link {
-    font-size: 12px; color: var(--panel-muted); text-decoration: none;
-    border: 1px solid var(--panel-border); padding: 6px 14px; border-radius: 6px; transition: all 0.15s;
-  }
-  .back-link:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+	const pageSpecificCSS = `
   .note-card {
     display: block; padding: 14px 16px; border: 1px solid var(--panel-border); border-radius: 8px;
     margin-bottom: 10px; text-decoration: none; color: var(--page-fg);
@@ -71,16 +70,43 @@ export function renderNotesIndex(notes: NoteRecord[], theme: TmuxWebTheme): stri
     display: flex; justify-content: space-between;
   }
   .empty { font-size: 13px; color: var(--panel-muted); line-height: 1.6; margin-top: 20px; }
+  ${commandbarEnabled ? commandbarCSS() : ''}
+  ${notesDrawerCSS()}`;
+
+	return /* html */ `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<title>Notes — tmux-web</title>
+<style>
+  ${cssVarsStyle(theme.shell)}
+  ${sharedLayoutCSS(pageSpecificCSS)}
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="page-header">
-    <h1>All notes</h1>
-    <a href="/" class="back-link">Back</a>
+
+${sharedHeader({ commandbarEnabled, title: 'All Notes' })}
+
+<div class="page-wrap">
+  <div class="page-layout">
+    ${sharedSidebar({ activePage: 'notes', agentsEnabled, refreshHref: '/notes' })}
+    <main class="main-panel">
+      <div id="notes-list">${body}</div>
+    </main>
   </div>
-  <div id="notes-list">${body}</div>
 </div>
+
+${newSessionModalHTML()}
+${commandbarEnabled ? commandbarHTML() : ''}
+${notesDrawerHTML('Notes — Global')}
+
+<script type="module">
+${notesDrawerScript('__global__')}
+${commandbarEnabled ? commandbarScript(commandbarSessions, []) : ''}
+${newSessionModalScript()}
+</script>
 </body>
 </html>`;
 }

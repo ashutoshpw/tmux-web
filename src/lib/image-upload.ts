@@ -58,6 +58,21 @@ function resolveMime(declared: string | undefined, buf: Buffer): string {
 	throw new ImageUploadError('unsupported image type', 400);
 }
 
+export function validateUploadedImage(
+	data: Buffer,
+	declaredMime?: string,
+): { mime: string; ext: string } {
+	if (data.length === 0) {
+		throw new ImageUploadError('empty file', 400);
+	}
+	if (data.length > MAX_UPLOAD_BYTES) {
+		throw new ImageUploadError(`file exceeds ${MAX_UPLOAD_BYTES} bytes`, 413);
+	}
+
+	const mime = resolveMime(declaredMime, data);
+	return { mime, ext: MIME_TO_EXT[mime] };
+}
+
 function localDateFolder(): string {
 	const d = new Date();
 	const y = d.getFullYear();
@@ -70,15 +85,7 @@ export async function saveUploadedImage(
 	data: Buffer,
 	declaredMime?: string,
 ): Promise<{ path: string }> {
-	if (data.length === 0) {
-		throw new ImageUploadError('empty file', 400);
-	}
-	if (data.length > MAX_UPLOAD_BYTES) {
-		throw new ImageUploadError(`file exceeds ${MAX_UPLOAD_BYTES} bytes`, 413);
-	}
-
-	const mime = resolveMime(declaredMime, data);
-	const ext = MIME_TO_EXT[mime];
+	const { mime, ext } = validateUploadedImage(data, declaredMime);
 	const dateDir = localDateFolder();
 	const dir = path.join(getUploadsRoot(), dateDir);
 	await mkdir(dir, { recursive: true, mode: 0o700 });

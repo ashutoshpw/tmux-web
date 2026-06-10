@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SchedulerService, isValidScheduleInput } from '../src/lib/scheduler.js';
+import { SchedulerService, isValidScheduleInput, isValidRescheduleInput } from '../src/lib/scheduler.js';
 import type { DbSchema } from '../src/lib/db.js';
 
 function createDb(initial?: Partial<DbSchema>) {
@@ -157,5 +157,57 @@ describe('SchedulerService', () => {
 			expect.objectContaining({ id: 'missed', triggeredAt: 50, status: 'missed' }),
 		]);
 		expect(scheduler.listTriggered()).toEqual([expect.objectContaining({ id: 'missed', status: 'missed' })]);
+	});
+
+	it('validates reschedule request bodies', () => {
+		expect(isValidRescheduleInput({ delayMs: 5000 })).toBe(true);
+		expect(isValidRescheduleInput({ delayMs: 1 })).toBe(true);
+		expect(isValidRescheduleInput({ delayMs: 86_400_000 })).toBe(true);
+		expect(isValidRescheduleInput({ delayMs: 0 })).toBe(false);
+		expect(isValidRescheduleInput({ delayMs: 86_400_001 })).toBe(false);
+		expect(isValidRescheduleInput({ delayMs: '5000' })).toBe(false);
+		expect(isValidRescheduleInput(null)).toBe(false);
+		expect(isValidRescheduleInput({})).toBe(false);
+	});
+
+	it('reschedules a task: cancels old timer, sets new fireAt, persists', async () => {
+		const db = createDb();
+		const clearTimer = vi.fn();
+		let timerHandle = 0;
+		const scheduler = new SchedulerService({
+			db,
+			now: () => 1_000,
+			createId: () => 'task-1',
+			setTimer: vi.fn(() => ++timerHandle as any) as any,
+			clearTimer: clearTimer as any,
+			sendKeys: vi.fn(),
+		});
+
+		await scheduler.create({ sessionName: 'dev', windowIndex: 0, text: 'echo hi', delayMs: 60_000 });
+		const oldHandle = timerHandle;
+
+		const updated = await scheduler.reschedule('task-1', 5_000);
+
+		expect(updated).not.toBeNull();
+		expect(updated!.fireAt).toBe(1_000 + 5_000);
+		expect(updated!.id).toBe('task-1');
+		expect(clearTimer).toHaveBeenCalledWith(oldHandle);
+		expect(db.data.scheduledTasks[0].fireAt).toBe(6_000);
+		expect(db.write).toHaveBeenCalledTimes(2);
+
+		const view = scheduler.list('dev');
+		expect(view[0].fireAt).toBe(6_000);
+		expect(view[0].remainingMs).toBe(5_000);
+	});
+
+	it('reschedule returns null for unknown id', async () => {
+		const db = createDb();
+		const scheduler = new SchedulerService({
+			db,
+			setTimer: vi.fn(() => 1 as any) as any,
+			sendKeys: vi.fn(),
+		});
+		const result = await scheduler.reschedule('nonexistent', 5_000);
+		expect(result).toBeNull();
 	});
 });

@@ -12,6 +12,12 @@ export type CommandbarAction = {
 	clickTargetId?: string;
 	/** Or navigate to this URL on select. Takes precedence over clickTargetId. */
 	href?: string;
+	/** Drill into an inline subview on Right Arrow (e.g. windows list). */
+	subView?: 'windows';
+};
+
+export type CommandbarContext = {
+	sessionName?: string;
 };
 
 export function buildCommandbarSessions(
@@ -97,6 +103,13 @@ export function commandbarCSS(): string {
   .cmdbar-row-meta {
     flex: 0 0 auto; color: var(--panel-muted); font-size: 11px; text-align: right;
   }
+  .cmdbar-row-meta-current { color: var(--panel-success); text-transform: uppercase; letter-spacing: 0.06em; }
+  .cmdbar-rename-input {
+    width: 100%; min-width: 0; border: 1px solid rgba(125, 211, 252, 0.35);
+    border-radius: 4px; padding: 4px 6px; background: rgba(0, 0, 0, 0.25);
+    color: var(--page-fg); font: inherit; font-size: 13px; outline: none;
+  }
+  .cmdbar-rename-input:focus { border-color: var(--panel-accent); }
   .cmdbar-empty {
     padding: 28px 16px; text-align: center; color: var(--panel-muted); font-size: 12px;
   }
@@ -129,21 +142,33 @@ export function commandbarHTML(): string {
   <div class="cmdbar-list" id="cmdbar-list"></div>
   <div class="cmdbar-footer">
     <span id="cmdbar-count">Recent sessions</span>
-    <span>Enter opens · Esc closes</span>
+    <span id="cmdbar-hint">Enter opens · Esc closes</span>
   </div>
 </div>`;
 }
 
-export function commandbarScript(sessions: CommandbarSession[], actions: CommandbarAction[] = []): string {
+export function commandbarScript(
+	sessions: CommandbarSession[],
+	actions: CommandbarAction[] = [],
+	context: CommandbarContext = {},
+): string {
 	const sessionsJson = JSON.stringify(sessions).replace(/</g, '\\u003c');
 	const actionsJson = JSON.stringify(actions).replace(/</g, '\\u003c');
+	const sessionNameJson = JSON.stringify(context.sessionName ?? null).replace(/</g, '\\u003c');
 	return `
 (function() {
   const initialSessions = ${sessionsJson};
   const actions = ${actionsJson}.map((action) => ({ ...action, kind: 'action' }));
+  const sessionName = ${sessionNameJson};
   let sessions = initialSessions;
   let visible = [];
   let activeIndex = 0;
+  let view = 'root';
+  let windows = [];
+  let renaming = false;
+
+  const ROOT_PLACEHOLDER = 'Filter tmux sessions';
+  const WINDOWS_PLACEHOLDER = 'Filter windows';
 
   const openBtn = document.getElementById('cmdbar-open');
   const backdrop = document.getElementById('cmdbar-backdrop');
@@ -151,7 +176,8 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
   const input = document.getElementById('cmdbar-input');
   const list = document.getElementById('cmdbar-list');
   const count = document.getElementById('cmdbar-count');
-  if (!openBtn || !backdrop || !panel || !input || !list || !count) return;
+  const hint = document.getElementById('cmdbar-hint');
+  if (!openBtn || !backdrop || !panel || !input || !list || !count || !hint) return;
 
   const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 
@@ -182,6 +208,10 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
     return parts.join(' · ');
   }
 
+  function windowDisplayName(win) {
+    return win.label || win.name;
+  }
+
   function escapeHtml(value) {
     return String(value)
       .replace(/&/g, '&amp;')
@@ -191,12 +221,26 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
       .replace(/'/g, '&#39;');
   }
 
+  function updateChrome() {
+    if (view === 'windows') {
+      input.placeholder = WINDOWS_PLACEHOLDER;
+      hint.textContent = 'Enter switches · r renames · ← back · Esc closes';
+    } else {
+      input.placeholder = ROOT_PLACEHOLDER;
+      hint.textContent = 'Enter opens · Esc closes';
+    }
+  }
+
   function selectSession(session) {
     window.location.href = '/s/' + encodeURIComponent(session.name);
   }
 
   function selectItem(item) {
     if (item.kind === 'action') {
+      if (item.subView === 'windows' && sessionName) {
+        void enterWindowsView();
+        return;
+      }
       setOpen(false);
       if (item.href) {
         window.location.href = item.href;
@@ -208,7 +252,7 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
     selectSession(item);
   }
 
-  function render() {
+  function renderRoot() {
     const query = input.value.trim().toLowerCase();
     const actionMatches = actions.filter((action) => (
       action.label.toLowerCase().includes(query) || action.meta.toLowerCase().includes(query)
@@ -235,16 +279,161 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
     )).join('');
   }
 
+  function renderWindows() {
+    const query = input.value.trim().toLowerCase();
+    visible = query
+      ? windows.filter((win) => {
+          const label = (win.label || '').toLowerCase();
+          const name = win.name.toLowerCase();
+          return label.includes(query) || name.includes(query) || String(win.index).includes(query);
+        })
+      : windows.slice();
+    activeIndex = Math.min(activeIndex, Math.max(0, visible.length - 1));
+    count.textContent = query
+      ? visible.length + ' window' + (visible.length === 1 ? '' : 's')
+      : 'Switch window';
+
+    if (!visible.length) {
+      list.innerHTML = '<div class="cmdbar-empty">' + (windows.length ? 'No windows found' : 'No windows in this session') + '</div>';
+      return;
+    }
+
+    list.innerHTML = visible.map((win, index) => {
+      const metaClass = win.active ? ' cmdbar-row-meta-current' : '';
+      const meta = win.active ? 'current' : String(win.index);
+      return (
+        '<button class="cmdbar-row' + (index === activeIndex ? ' active' : '') + '" data-index="' + index + '">' +
+          '<span class="cmdbar-row-name">' + escapeHtml(windowDisplayName(win)) + '</span>' +
+          '<span class="cmdbar-row-meta' + metaClass + '">' + escapeHtml(meta) + '</span>' +
+        '</button>'
+      );
+    }).join('');
+  }
+
+  function render() {
+    updateChrome();
+    if (view === 'windows') renderWindows();
+    else renderRoot();
+  }
+
+  async function fetchWindows() {
+    if (!sessionName) return [];
+    try {
+      const res = await fetch('/api/session/' + encodeURIComponent(sessionName) + '/windows');
+      if (!res.ok) return [];
+      return await res.json();
+    } catch {
+      return [];
+    }
+  }
+
+  async function enterWindowsView() {
+    if (!sessionName) return;
+    windows = await fetchWindows();
+    view = 'windows';
+    input.value = '';
+    activeIndex = 0;
+    render();
+    setTimeout(() => input.focus(), 0);
+  }
+
+  function exitWindowsView() {
+    view = 'root';
+    input.value = '';
+    activeIndex = 0;
+    render();
+    setTimeout(() => input.focus(), 0);
+  }
+
+  async function selectWindow(win) {
+    if (!sessionName || !win || win.active) return;
+    try {
+      const res = await fetch(
+        '/api/session/' + encodeURIComponent(sessionName) + '/select-window',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ windowIndex: win.index }),
+        },
+      );
+      if (!res.ok) return;
+      setOpen(false);
+    } catch {}
+  }
+
+  function startWindowRename(win) {
+    if (!sessionName || !win || renaming) return;
+    renaming = true;
+    const row = list.querySelector('.cmdbar-row.active');
+    if (!row) {
+      renaming = false;
+      return;
+    }
+    const nameEl = row.querySelector('.cmdbar-row-name');
+    if (!nameEl) {
+      renaming = false;
+      return;
+    }
+
+    const editInput = document.createElement('input');
+    editInput.type = 'text';
+    editInput.className = 'cmdbar-rename-input';
+    editInput.value = win.label || win.name || '';
+    editInput.placeholder = win.name || '';
+    editInput.addEventListener('click', (event) => event.stopPropagation());
+
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      renaming = false;
+      if (save) {
+        try {
+          const res = await fetch(
+            '/api/session/' + encodeURIComponent(sessionName) + '/window-label',
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ windowIndex: win.index, label: editInput.value }),
+            },
+          );
+          if (res.ok) {
+            const trimmed = editInput.value.trim();
+            win.label = trimmed || null;
+            const stored = windows.find((entry) => entry.index === win.index);
+            if (stored) stored.label = win.label;
+          }
+        } catch {}
+      }
+      render();
+    };
+
+    editInput.addEventListener('keydown', (event) => {
+      event.stopPropagation();
+      if (event.key === 'Enter') { event.preventDefault(); void finish(true); }
+      else if (event.key === 'Escape') { event.preventDefault(); void finish(false); }
+    });
+    editInput.addEventListener('blur', () => { void finish(true); });
+
+    nameEl.replaceWith(editInput);
+    editInput.focus();
+    editInput.select();
+  }
+
   function setOpen(nextOpen) {
     panel.classList.toggle('open', nextOpen);
     backdrop.classList.toggle('open', nextOpen);
     if (nextOpen) {
+      view = 'root';
+      renaming = false;
       input.value = '';
       activeIndex = 0;
       render();
       setTimeout(() => input.focus(), 0);
       refreshSessions();
     } else {
+      view = 'root';
+      renaming = false;
       openBtn.focus();
     }
   }
@@ -261,16 +450,21 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
   openBtn.addEventListener('click', () => setOpen(true));
   backdrop.addEventListener('click', () => setOpen(false));
   input.addEventListener('input', () => {
+    if (renaming) return;
     activeIndex = 0;
     render();
   });
   list.addEventListener('click', (event) => {
+    if (renaming) return;
     const row = event.target instanceof Element ? event.target.closest('.cmdbar-row') : null;
     if (!row) return;
     const item = visible[Number(row.dataset.index)];
-    if (item) selectItem(item);
+    if (!item) return;
+    if (view === 'windows') void selectWindow(item);
+    else selectItem(item);
   });
   list.addEventListener('mousemove', (event) => {
+    if (renaming) return;
     const row = event.target instanceof Element ? event.target.closest('.cmdbar-row') : null;
     if (!row) return;
     activeIndex = Number(row.dataset.index);
@@ -285,10 +479,29 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
       setOpen(!panel.classList.contains('open'));
       return;
     }
-    if (!panel.classList.contains('open')) return;
+    if (!panel.classList.contains('open') || renaming) return;
+
     if (event.key === 'Escape') {
       event.preventDefault();
-      setOpen(false);
+      if (view === 'windows') exitWindowsView();
+      else setOpen(false);
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      if (view === 'windows') {
+        event.preventDefault();
+        exitWindowsView();
+      }
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      if (view === 'root') {
+        const item = visible[activeIndex];
+        if (item && item.kind === 'action' && item.subView === 'windows' && sessionName) {
+          event.preventDefault();
+          void enterWindowsView();
+        }
+      }
       return;
     }
     if (event.key === 'ArrowDown') {
@@ -306,7 +519,15 @@ export function commandbarScript(sessions: CommandbarSession[], actions: Command
     if (event.key === 'Enter') {
       event.preventDefault();
       const item = visible[activeIndex];
-      if (item) selectItem(item);
+      if (!item) return;
+      if (view === 'windows') void selectWindow(item);
+      else selectItem(item);
+      return;
+    }
+    if (view === 'windows' && !event.metaKey && !event.ctrlKey && !event.altKey && event.key === 'r') {
+      event.preventDefault();
+      const item = visible[activeIndex];
+      if (item) startWindowRename(item);
     }
   }, true);
 

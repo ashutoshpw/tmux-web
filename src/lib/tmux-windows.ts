@@ -108,6 +108,17 @@ export function newSessionWindow(session: string): void {
 	}
 }
 
+export function newTmuxSession(name: string, dir?: string): void {
+	const args = ["new-session", "-d", "-s", name];
+	if (dir) args.push("-c", dir);
+	try {
+		execFileSync("tmux", args, { timeout: 5000 });
+	} catch (err: unknown) {
+		const message = err instanceof Error ? err.message : "new-session failed";
+		throw new TmuxWindowsError(message, 500);
+	}
+}
+
 export function selectSessionWindow(session: string, windowIndex: number): void {
 	if (!sessionExists(session)) {
 		throw new TmuxWindowsError("session not found", 404);

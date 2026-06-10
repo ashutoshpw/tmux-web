@@ -450,13 +450,31 @@ app.get("/api/fs/list", (c) => {
 	let rawPath = c.req.query("path") ?? home;
 	if (rawPath.startsWith("~")) rawPath = home + rawPath.slice(1);
 	if (!rawPath.startsWith("/")) rawPath = path.join(home, rawPath);
+
+	// If rawPath is an existing directory (or ends with "/"), list its contents.
+	// Otherwise treat the trailing segment as a prefix and list/filter its parent,
+	// so partial input like "~/Doc" suggests "~/Documents".
+	let dirPath = rawPath;
+	let prefix = "";
+	let listDirectly = rawPath.endsWith("/");
+	if (!listDirectly) {
+		try {
+			listDirectly = statSync(rawPath).isDirectory();
+		} catch {}
+	}
+	if (!listDirectly) {
+		dirPath = path.dirname(rawPath);
+		prefix = path.basename(rawPath).toLowerCase();
+	}
+
 	try {
-		const entries = readdirSync(rawPath);
+		const entries = readdirSync(dirPath);
 		const dirs: string[] = [];
 		for (const entry of entries) {
 			if (entry.startsWith(".")) continue;
+			if (prefix && !entry.toLowerCase().startsWith(prefix)) continue;
 			try {
-				const full = path.join(rawPath, entry);
+				const full = path.join(dirPath, entry);
 				if (statSync(full).isDirectory()) dirs.push(full);
 			} catch {}
 			if (dirs.length >= 50) break;

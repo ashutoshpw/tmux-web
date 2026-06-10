@@ -78,7 +78,7 @@ export function sharedLayoutCSS(extraCSS = ''): string {
     margin: 0 16px;
   }
   .modal-panel h2 { font-size: 14px; font-weight: 600; margin: 0 0 20px; color: var(--panel-accent); letter-spacing: 0.06em; text-transform: uppercase; }
-  .modal-field { margin-bottom: 16px; }
+  .modal-field { margin-bottom: 16px; position: relative; }
   .modal-field label { display: block; font-size: 11px; color: var(--panel-muted); margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; }
   .modal-field input {
     width: 100%; padding: 9px 12px; background: var(--page-bg);
@@ -87,6 +87,21 @@ export function sharedLayoutCSS(extraCSS = ''): string {
     outline: none; transition: border-color 0.15s;
   }
   .modal-field input:focus { border-color: var(--panel-accent); }
+  /* Custom directory autocomplete dropdown (replaces native <datalist>) */
+  .modal-dropdown {
+    display: none; position: absolute; left: 0; right: 0; top: 100%;
+    margin-top: 4px; max-height: 220px; overflow-y: auto; z-index: 10;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .modal-dropdown.open { display: block; }
+  .modal-dropdown-item {
+    padding: 7px 12px; font-size: 12px; color: var(--page-fg); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .modal-dropdown-item:hover, .modal-dropdown-item.active {
+    background: var(--panel-border); color: var(--panel-accent);
+  }
   .modal-error { font-size: 12px; color: #fc8181; margin-bottom: 12px; display: none; }
   .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
   .modal-btn {
@@ -186,8 +201,8 @@ export function newSessionModalHTML(): string {
     </div>
     <div class="modal-field">
       <label for="ns-dir">Start directory</label>
-      <input type="text" id="ns-dir" placeholder="~" autocomplete="off" spellcheck="false" list="ns-dir-list" />
-      <datalist id="ns-dir-list"></datalist>
+      <input type="text" id="ns-dir" placeholder="~" autocomplete="off" spellcheck="false" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="ns-dir-list" />
+      <div class="modal-dropdown" id="ns-dir-list" role="listbox"></div>
     </div>
     <p class="modal-error" id="ns-error"></p>
     <div class="modal-actions">
@@ -216,7 +231,7 @@ export function newSessionModalScript(): string {
     dirInput.value = '';
     errorEl.style.display = 'none';
     errorEl.textContent = '';
-    dirList.innerHTML = '';
+    closeDropdown();
     setTimeout(() => nameInput.focus(), 50);
   }
 
@@ -228,23 +243,59 @@ export function newSessionModalScript(): string {
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('open')) closeModal(); });
 
   let debounceTimer = null;
+  let activeIdx = -1;
+
+  function closeDropdown() {
+    dirList.classList.remove('open');
+    dirList.innerHTML = '';
+    activeIdx = -1;
+    dirInput.setAttribute('aria-expanded', 'false');
+  }
+
+  function setActive(idx) {
+    const items = dirList.querySelectorAll('.modal-dropdown-item');
+    if (!items.length) return;
+    activeIdx = (idx + items.length) % items.length;
+    items.forEach((it, i) => it.classList.toggle('active', i === activeIdx));
+    items[activeIdx].scrollIntoView({ block: 'nearest' });
+  }
+
+  function renderDropdown(dirs) {
+    dirList.innerHTML = '';
+    activeIdx = -1;
+    if (!dirs.length) { closeDropdown(); return; }
+    for (const d of dirs) {
+      const item = document.createElement('div');
+      item.className = 'modal-dropdown-item';
+      item.setAttribute('role', 'option');
+      item.textContent = d;
+      // mousedown (not click) so the input doesn't blur before we read the value
+      item.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        dirInput.value = d;
+        closeDropdown();
+        dirInput.focus();
+      });
+      dirList.appendChild(item);
+    }
+    dirList.classList.add('open');
+    dirInput.setAttribute('aria-expanded', 'true');
+  }
+
   dirInput.addEventListener('input', () => {
     clearTimeout(debounceTimer);
     const val = dirInput.value.trim();
-    if (!val) { dirList.innerHTML = ''; return; }
+    if (!val) { closeDropdown(); return; }
     debounceTimer = setTimeout(async () => {
       try {
         const res = await fetch('/api/fs/list?path=' + encodeURIComponent(val));
         const data = await res.json();
-        dirList.innerHTML = '';
-        for (const d of (data.dirs || [])) {
-          const opt = document.createElement('option');
-          opt.value = d;
-          dirList.appendChild(opt);
-        }
-      } catch {}
+        renderDropdown(data.dirs || []);
+      } catch { closeDropdown(); }
     }, 200);
   });
+
+  dirInput.addEventListener('blur', () => { setTimeout(closeDropdown, 120); });
 
   async function submit() {
     const name = nameInput.value.trim();
@@ -270,6 +321,21 @@ export function newSessionModalScript(): string {
 
   submitBtn.addEventListener('click', submit);
   nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') dirInput.focus(); });
-  dirInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  dirInput.addEventListener('keydown', (e) => {
+    const open = dirList.classList.contains('open');
+    const items = dirList.querySelectorAll('.modal-dropdown-item');
+    if (open && items.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIdx + 1); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIdx - 1); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDropdown(); return; }
+      if (e.key === 'Enter' && activeIdx >= 0) {
+        e.preventDefault();
+        dirInput.value = items[activeIdx].textContent;
+        closeDropdown();
+        return;
+      }
+    }
+    if (e.key === 'Enter') submit();
+  });
 })();`;
 }

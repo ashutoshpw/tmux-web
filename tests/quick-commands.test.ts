@@ -132,7 +132,12 @@ describe('quick commands rendering', () => {
 		expect(html).toContain('class="quick-item"');
 		expect(html).toContain('class="quick-icon-btn quick-edit"');
 		expect(html).toContain('id="quick-edit-drawer"');
+		expect(html).toContain('class="quick-drawer resizable-drawer"');
+		expect(html).toContain('class="drawer-resize-handle"');
+		expect(html).toContain('tmux-web:drawer-width:quick-commands');
 		expect(html).toContain('id="quick-edit-form"');
+		expect(html).toContain('id="quick-add"');
+		expect(html).not.toContain('id="quick-create"');
 		expect(html).not.toContain('<form class="quick-card" data-id="cmd-1"');
 	});
 });

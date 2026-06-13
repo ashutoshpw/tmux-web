@@ -3,6 +3,7 @@ import type { QuickCommandRecord } from '../db.js';
 import type { TmuxWebTheme } from '../themes/types.js';
 import { commandbarCSS, commandbarHTML, commandbarScript } from '../commandbar.js';
 import type { CommandbarSession } from '../commandbar.js';
+import { drawerResizeCSS, drawerResizeHandleHTML, drawerResizeScript } from '../drawer-resize.js';
 import {
 	sharedLayoutCSS,
 	sharedHeader,
@@ -45,20 +46,27 @@ export function renderQuickCommandsPage(
 	const commandsJson = JSON.stringify(commands).replace(/</g, '\\u003c');
 	const body = commands.length
 		? commands.map(renderCommandCard).join('\n')
-		: '<p class="empty">No quick commands yet. Add one below, then use it from the terminal commandbar.</p>';
+		: '<p class="empty">No quick commands yet. Add one with the button above, then use it from the terminal commandbar.</p>';
 
 	const pageSpecificCSS = `
   .intro {
     margin: 0 0 18px; color: var(--panel-muted); font-size: 13px; line-height: 1.6;
   }
+  .quick-section-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin: 24px 0 10px;
+  }
   .quick-section-title {
     color: var(--panel-accent); font-size: 12px; letter-spacing: 0.08em;
-    margin: 24px 0 10px; text-transform: uppercase;
+    margin: 0; text-transform: uppercase;
   }
-  .quick-card {
-    display: flex; flex-direction: column; gap: 12px;
-    padding: 16px; border: 1px solid var(--panel-border); border-radius: 9px;
-    margin-bottom: 12px; background: var(--panel-bg);
+  .quick-add-btn {
+    border: 1px solid var(--panel-success); border-radius: 6px;
+    background: none; color: var(--panel-success); font: inherit; font-size: 12px;
+    padding: 7px 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .quick-add-btn:hover {
+    background: rgba(115, 201, 145, 0.12);
   }
   .quick-item {
     display: flex; flex-direction: column; gap: 12px;
@@ -146,12 +154,13 @@ export function renderQuickCommandsPage(
   .quick-drawer-backdrop.open { opacity: 1; pointer-events: auto; }
   .quick-drawer {
     position: fixed; top: 0; right: 0; z-index: 601; height: 100vh;
-    width: min(460px, calc(100vw - 24px)); padding: 24px;
+    width: 460px; padding: 24px; overflow-y: auto;
     background: var(--panel-bg); border-left: 1px solid var(--panel-border);
     box-shadow: -18px 0 60px rgba(0, 0, 0, 0.45);
     transform: translateX(100%); transition: transform 0.2s ease;
   }
   .quick-drawer.open { transform: translateX(0); }
+  ${drawerResizeCSS()}
   .quick-drawer-header {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
     margin-bottom: 18px;
@@ -201,26 +210,10 @@ ${sharedHeader({ commandbarEnabled, title: 'Quick Commands' })}
       <p class="intro">Configure reusable snippets that can be pasted into the active tmux pane from the terminal commandbar.</p>
       <p class="quick-error" id="quick-error"></p>
 
-      <h2 class="quick-section-title">Add Command</h2>
-      <form class="quick-card quick-form" id="quick-create">
-        <label>
-          <span>Title</span>
-          <input name="title" type="text" placeholder="Run tests" autocomplete="off" />
-        </label>
-        <label>
-          <span>Command</span>
-          <textarea name="command" placeholder="bun run test" spellcheck="false"></textarea>
-        </label>
-        <label>
-          <span>Description</span>
-          <input name="description" type="text" placeholder="Optional context shown in the commandbar" autocomplete="off" />
-        </label>
-        <div class="quick-actions">
-          <button class="quick-save" type="submit">Add Command</button>
-        </div>
-      </form>
-
-      <h2 class="quick-section-title">Configured</h2>
+      <div class="quick-section-head">
+        <h2 class="quick-section-title">Configured</h2>
+        <button class="quick-add-btn" id="quick-add" type="button">Add Command</button>
+      </div>
       <div id="quick-list">${body}</div>
     </main>
   </div>
@@ -228,46 +221,77 @@ ${sharedHeader({ commandbarEnabled, title: 'Quick Commands' })}
 
 ${newSessionModalHTML()}
 <div class="quick-drawer-backdrop" id="quick-edit-backdrop"></div>
-<aside class="quick-drawer" id="quick-edit-drawer" aria-hidden="true" aria-label="Edit quick command">
+<aside class="quick-drawer resizable-drawer" id="quick-edit-drawer" aria-hidden="true" aria-label="Quick command editor">
+  ${drawerResizeHandleHTML()}
   <div class="quick-drawer-header">
     <div>
-      <h2>Edit Command</h2>
-      <p>Changes apply to the commandbar immediately after save.</p>
+      <h2 id="quick-drawer-title">Edit Command</h2>
+      <p id="quick-drawer-desc">Changes apply to the commandbar immediately after save.</p>
     </div>
-    <button class="quick-drawer-close" id="quick-edit-close" type="button" aria-label="Close edit drawer">&times;</button>
+    <button class="quick-drawer-close" id="quick-edit-close" type="button" aria-label="Close editor">&times;</button>
   </div>
   <form class="quick-form" id="quick-edit-form">
     <input name="id" type="hidden" />
     <label>
       <span>Title</span>
-      <input name="title" type="text" autocomplete="off" />
+      <input name="title" type="text" placeholder="Run tests" autocomplete="off" />
     </label>
     <label>
       <span>Command</span>
-      <textarea name="command" spellcheck="false"></textarea>
+      <textarea name="command" placeholder="bun run test" spellcheck="false"></textarea>
     </label>
     <label>
       <span>Description</span>
-      <input name="description" type="text" autocomplete="off" />
+      <input name="description" type="text" placeholder="Optional context shown in the commandbar" autocomplete="off" />
     </label>
     <div class="quick-actions">
       <button class="quick-cancel" id="quick-edit-cancel" type="button">Cancel</button>
-      <button class="quick-save" type="submit">Save</button>
+      <button class="quick-save" id="quick-drawer-submit" type="submit">Save</button>
     </div>
   </form>
 </aside>
 ${commandbarEnabled ? commandbarHTML() : ''}
 
 <script type="module">
+${drawerResizeScript('quick-edit-drawer', 'tmux-web:drawer-width:quick-commands', 460)}
+
 const commands = ${commandsJson};
 const errorEl = document.getElementById('quick-error');
 const editBackdrop = document.getElementById('quick-edit-backdrop');
 const editDrawer = document.getElementById('quick-edit-drawer');
 const editForm = document.getElementById('quick-edit-form');
+const drawerTitle = document.getElementById('quick-drawer-title');
+const drawerDesc = document.getElementById('quick-drawer-desc');
+const drawerSubmit = document.getElementById('quick-drawer-submit');
 
 function showError(message) {
   errorEl.textContent = message || '';
   errorEl.classList.toggle('open', !!message);
+}
+
+function setDrawerMode(mode) {
+  const isCreate = mode === 'create';
+  drawerTitle.textContent = isCreate ? 'Add Command' : 'Edit Command';
+  drawerDesc.textContent = isCreate
+    ? 'New commands appear in the terminal commandbar after save.'
+    : 'Changes apply to the commandbar immediately after save.';
+  drawerSubmit.textContent = isCreate ? 'Add Command' : 'Save';
+  editDrawer.setAttribute('aria-label', isCreate ? 'Add quick command' : 'Edit quick command');
+}
+
+function openDrawer() {
+  editDrawer.classList.add('open');
+  editBackdrop.classList.add('open');
+  editDrawer.setAttribute('aria-hidden', 'false');
+  setTimeout(() => editForm.elements.title.focus(), 50);
+}
+
+function openCreateDrawer() {
+  showError('');
+  editForm.reset();
+  editForm.elements.id.value = '';
+  setDrawerMode('create');
+  openDrawer();
 }
 
 function openEditDrawer(command) {
@@ -276,10 +300,8 @@ function openEditDrawer(command) {
   editForm.elements.title.value = command.title || '';
   editForm.elements.command.value = command.command || '';
   editForm.elements.description.value = command.description || '';
-  editDrawer.classList.add('open');
-  editBackdrop.classList.add('open');
-  editDrawer.setAttribute('aria-hidden', 'false');
-  setTimeout(() => editForm.elements.title.focus(), 50);
+  setDrawerMode('edit');
+  openDrawer();
 }
 
 function closeEditDrawer() {
@@ -314,33 +336,23 @@ async function sendJson(url, method, body) {
   return res.json();
 }
 
-document.getElementById('quick-create').addEventListener('submit', async (event) => {
-  event.preventDefault();
-  showError('');
-  const form = event.currentTarget;
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
-  try {
-    await sendJson('/api/quick-commands', 'POST', payloadFromForm(form));
-    location.reload();
-  } catch (err) {
-    showError(err instanceof Error ? err.message : 'failed to add command');
-    button.disabled = false;
-  }
-});
+document.getElementById('quick-add').addEventListener('click', openCreateDrawer);
 
 editForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   showError('');
   const id = String(editForm.elements.id.value || '');
-  if (!id) return;
   const button = editForm.querySelector('button[type="submit"]');
   button.disabled = true;
   try {
-    await sendJson('/api/quick-commands/' + encodeURIComponent(id), 'PATCH', payloadFromForm(editForm));
+    if (id) {
+      await sendJson('/api/quick-commands/' + encodeURIComponent(id), 'PATCH', payloadFromForm(editForm));
+    } else {
+      await sendJson('/api/quick-commands', 'POST', payloadFromForm(editForm));
+    }
     location.reload();
   } catch (err) {
-    showError(err instanceof Error ? err.message : 'failed to save command');
+    showError(err instanceof Error ? err.message : (id ? 'failed to save command' : 'failed to add command'));
     button.disabled = false;
   }
 });

@@ -31,7 +31,7 @@ export function validateQuickCommandInput(input: QuickCommandInput): QuickComman
 	if (!title) return { ok: false, error: 'title is required' };
 	if (!command) return { ok: false, error: 'command is required' };
 	if (title.length > 120) return { ok: false, error: 'title must be 120 characters or fewer' };
-	if (command.length > 4096) return { ok: false, error: 'command must be 4096 characters or fewer' };
+	if (command.length > 40960) return { ok: false, error: 'command must be 40960 characters or fewer' };
 	if (description.length > 240) return { ok: false, error: 'description must be 240 characters or fewer' };
 
 	return {

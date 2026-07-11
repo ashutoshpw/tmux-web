@@ -95,6 +95,8 @@ describe('quick commands rendering', () => {
 		expect(html).toContain('subView":"quickCommands"');
 		expect(html).toContain('cmdbar-row-chevron');
 		expect(html).toContain('bun test');
+		expect(html).toContain('flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;');
+		expect(html).toContain('flex: 0 1 45%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;');
 	});
 
 	it('escapes hostile quick command content on the configuration page', () => {

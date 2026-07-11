@@ -36,6 +36,7 @@ import { handleClientMessage } from "./lib/ws-message.js";
 import { loadDotEnv } from "./lib/load-env.js";
 import { cmdAdd, cmdRemove, cmdList, cmdSetup, cmdTheme, printUsage, printVersion } from "./lib/cli.js";
 import { readSettings, writeSettings } from "./lib/settings.js";
+import { INVALID_TIMEZONE_MESSAGE, isValidTimeZone } from "./lib/timezone.js";
 import { readActiveTheme, setActiveThemeTemplate } from "./lib/theme-store.js";
 import { isThemeTemplateId } from "./lib/themes/index.js";
 import { installPlugin, uninstallPlugin } from "./lib/plugins.js";
@@ -189,6 +190,10 @@ const agentsEnabled = settings.agents === true;
 const agentsBackgroundWatch = agentsEnabled && settings.agentsBackgroundWatch === true;
 const terminalRenderer = resolveTerminalRenderer(startupArgs, settings.terminalRenderer);
 const scheduleHistoryDays = clampHistoryDays(settings.scheduleHistoryDays);
+const scheduleTimezone = typeof settings.scheduleTimezone === "string" && isValidTimeZone(settings.scheduleTimezone.trim())
+	? settings.scheduleTimezone.trim()
+	: undefined;
+const scheduleAbsoluteTime = settings.scheduleAbsoluteTime === true;
 const extsDir   = path.join(process.cwd(), "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
@@ -334,7 +339,7 @@ app.get("/notes/:session", (c) => {
 
 app.get("/schedule", (c) => {
 	const commandbarSessions = commandbarEnabled ? buildCommandbarSessions(listSessions(), getSessionAccessMap()) : [];
-	return c.html(renderScheduleIndex(scheduler.list(), scheduler.listTriggered(), activeTheme, scheduleHistoryDays, commandbarEnabled, commandbarSessions, agentsEnabled));
+	return c.html(renderScheduleIndex(scheduler.list(), scheduler.listTriggered(), activeTheme, scheduleHistoryDays, commandbarEnabled, commandbarSessions, agentsEnabled, scheduleTimezone, scheduleAbsoluteTime));
 });
 
 app.get("/agents", (c) => {
@@ -430,6 +435,10 @@ app.post("/settings", async (c) => {
 	const historyDays = clampHistoryDays(
 		typeof body.scheduleHistoryDays === "string" ? Number(body.scheduleHistoryDays) : undefined,
 	);
+	const timezone = typeof body.scheduleTimezone === "string" ? body.scheduleTimezone.trim() : "";
+	if (timezone && !isValidTimeZone(timezone)) {
+		return c.redirect("/settings?error=" + encodeURIComponent(INVALID_TIMEZONE_MESSAGE), 303);
+	}
 
 	await writeSettings({
 		...current,
@@ -439,6 +448,8 @@ app.post("/settings", async (c) => {
 		terminalRenderer: renderer,
 		defaultView,
 		scheduleHistoryDays: historyDays,
+		scheduleTimezone: timezone || undefined,
+		scheduleAbsoluteTime: body.scheduleAbsoluteTime !== undefined,
 	});
 	return c.redirect("/settings?saved=1", 303);
 });

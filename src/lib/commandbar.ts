@@ -110,11 +110,12 @@ export function commandbarCSS(): string {
     border-color: rgba(125, 211, 252, 0.28); background: rgba(125, 211, 252, 0.08);
   }
   .cmdbar-row-name {
-    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     color: var(--panel-accent); font-size: 13px;
   }
   .cmdbar-row-meta {
-    flex: 0 0 auto; color: var(--panel-muted); font-size: 11px; text-align: right;
+    flex: 0 1 45%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--panel-muted); font-size: 11px; text-align: right;
   }
   .cmdbar-row-meta-current { color: var(--panel-success); text-transform: uppercase; letter-spacing: 0.06em; }
   .cmdbar-rename-input {
@@ -134,6 +135,8 @@ export function commandbarCSS(): string {
   @media (max-width: 560px) {
     .cmdbar-panel { top: 54px; width: calc(100vw - 16px); max-height: calc(100vh - 70px); }
     .cmdbar-row { align-items: flex-start; flex-direction: column; gap: 4px; }
+    .cmdbar-row-name,
+    .cmdbar-row-meta { flex: 0 1 auto; max-width: 100%; }
     .cmdbar-row-meta { text-align: left; }
   }`;
 }

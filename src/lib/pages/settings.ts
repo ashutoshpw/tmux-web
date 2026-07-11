@@ -78,6 +78,12 @@ function pageHead(title: string, theme: TmuxWebTheme): string {
     border-radius: 6px; padding: 7px 10px;
   }
   .num-input:focus { outline: none; border-color: var(--panel-accent); }
+  .text-input {
+    width: min(100%, 280px); font-size: 12px; font-family: inherit; color: var(--page-fg);
+    background: var(--page-bg); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 7px 10px;
+  }
+  .text-input:focus { outline: none; border-color: var(--panel-accent); }
   .suggest { font-size: 11px; color: var(--panel-muted); margin-top: 8px; }
   .suggest button { background: none; border: none; color: var(--panel-accent); cursor: pointer; font: inherit; font-size: 11px; padding: 0; text-decoration: underline; }
   .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -120,6 +126,8 @@ export function renderSettings(opts: {
 	const savedRenderer = settings.terminalRenderer ?? 'xterm';
 	const defaultView = settings.defaultView ?? 'default';
 	const scheduleHistoryDays = settings.scheduleHistoryDays ?? 7;
+	const scheduleTimezone = settings.scheduleTimezone ?? '';
+	const scheduleAbsoluteTime = settings.scheduleAbsoluteTime === true;
 
 	const pluginRows = plugins.length
 		? plugins.map((p) => `<div class="plugin-row">
@@ -188,6 +196,13 @@ export function renderSettings(opts: {
       <h2>Schedule history</h2>
       <p class="desc">Days to keep the <code>/schedule</code> "Recently Triggered" history (fired &amp; missed tasks). 1–365, default 7.</p>
       <label class="row"><input type="number" class="num-input" name="scheduleHistoryDays" min="1" max="365" value="${scheduleHistoryDays}" /> days</label>
+    </div>
+
+    <div class="section">
+      <h2>Schedule display</h2>
+      <p class="desc">Choose the timezone for absolute schedule timestamps. Use an IANA timezone such as <code>Asia/Kolkata</code>, <code>America/New_York</code>, or <code>UTC</code>. Leave blank to use each browser&rsquo;s timezone.</p>
+      <label class="row"><span>Timezone</span><input type="text" class="text-input" name="scheduleTimezone" value="${escapeHtml(scheduleTimezone)}" placeholder="Asia/Kolkata" autocomplete="off" spellcheck="false" /></label>
+      <label class="row"><input type="checkbox" name="scheduleAbsoluteTime" ${scheduleAbsoluteTime ? 'checked' : ''} /> Show absolute times by default on <code>/schedule</code></label>
     </div>
 
     <div class="form-actions">

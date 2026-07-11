@@ -13,6 +13,10 @@ export interface TmuxWebSettings {
 	agentsBackgroundWatch?: boolean;
 	/** Days to retain the /schedule "Recently Triggered" history. Defaults to 7. */
 	scheduleHistoryDays?: number;
+	/** IANA timezone used for schedule timestamps. Blank/unset uses the browser timezone. */
+	scheduleTimezone?: string;
+	/** Whether /schedule should initially show absolute timestamps instead of countdowns. */
+	scheduleAbsoluteTime?: boolean;
 }
 
 const CONFIG_PATH = getSettingsPath();

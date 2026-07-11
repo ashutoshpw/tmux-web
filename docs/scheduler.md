@@ -28,6 +28,14 @@ The `/schedule` page has two tabs:
   as overdue (`missed`). Each row deep-links to `/s/<session>?window=<index>`, which opens the
   session and switches tmux to the target window.
 
+The Upcoming tab includes a quick toggle for switching the live countdown to absolute timestamps in
+`YYYY-MM-DD HH:mm` 24-hour format. The default mode is controlled by the **Show absolute times by
+default** setting on `/settings`; the quick toggle only affects the current page.
+
+The **Schedule display** settings also accept an IANA timezone such as `Asia/Kolkata`,
+`America/New_York`, or `UTC`. When left blank, absolute timestamps use the browser's timezone.
+Timezone and default-display changes apply after restarting tmux-web, like the other startup settings.
+
 History is retained for **7 days** by default. Change it with the **Schedule history** setting on the
 `/settings` page, or by setting `scheduleHistoryDays` (1–365) in `settings.json`. Records outside the
 window are pruned when a task fires and on server startup.

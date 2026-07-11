@@ -16,6 +16,7 @@ import {
 	MAX_SCHEDULE_MS,
 	scheduleDelayParseScript,
 } from '../schedule-delay.js';
+import { formatAbsoluteTime } from '../timezone.js';
 
 export interface ScheduleTaskView {
 	id: string;
@@ -43,12 +44,11 @@ function escapeHtml(s: string): string {
 	return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-function formatFireAt(ts: number): string {
-	const d = new Date(ts);
-	return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatFireAt(ts: number, timeZone?: string): string {
+	return formatAbsoluteTime(ts, timeZone);
 }
 
-function renderTriggeredPanel(triggered: TriggeredTaskView[], retentionDays: number): string {
+function renderTriggeredPanel(triggered: TriggeredTaskView[], retentionDays: number, timeZone?: string): string {
 	if (!triggered.length) {
 		return `<p class="empty">No tasks triggered in the last ${retentionDays} day${retentionDays === 1 ? '' : 's'}.</p>`;
 	}
@@ -59,7 +59,7 @@ function renderTriggeredPanel(triggered: TriggeredTaskView[], retentionDays: num
   </div>
   <div class="task-row2">
     <a class="trig-target" href="/s/${encodeURIComponent(t.sessionName)}?window=${t.windowIndex}">${escapeHtml(t.sessionName)} &middot; win:${t.windowIndex}</a>
-    <span class="meta">${escapeHtml(formatFireAt(t.triggeredAt))}</span>
+    <span class="meta"><time class="absolute-time" data-timestamp="${t.triggeredAt}">${escapeHtml(formatFireAt(t.triggeredAt, timeZone))}</time></span>
   </div>${t.status === 'error' && t.error ? `\n  <div class="trig-error">${escapeHtml(t.error)}</div>` : ''}
 </div>`).join('\n');
 	return `<div class="task-list">${rows}</div>`;
@@ -73,6 +73,8 @@ export function renderScheduleIndex(
 	commandbarEnabled = false,
 	commandbarSessions: CommandbarSession[] = [],
 	agentsEnabled = false,
+	timeZone?: string,
+	absoluteTimeDefault = false,
 ): string {
 	const sorted = [...tasks].sort((a, b) => a.fireAt - b.fireAt);
 
@@ -87,10 +89,10 @@ export function renderScheduleIndex(
 		const rows = items.map((t) => `<div class="task" data-id="${escapeHtml(t.id)}">
   <div class="task-row1">
     <span class="cmd">${escapeHtml(t.text)}</span>
-    <span class="countdown" data-fire-at="${t.fireAt}">…</span>
+    <span class="countdown" data-fire-at="${t.fireAt}">${absoluteTimeDefault ? escapeHtml(formatFireAt(t.fireAt, timeZone)) : '…'}</span>
   </div>
   <div class="task-row2">
-    <span class="meta"><a class="win-link" href="/s/${encodeURIComponent(t.sessionName)}?window=${t.windowIndex}">win:${t.windowIndex}</a> &middot; fires ${escapeHtml(formatFireAt(t.fireAt))}</span>
+    <span class="meta"><a class="win-link" href="/s/${encodeURIComponent(t.sessionName)}?window=${t.windowIndex}">win:${t.windowIndex}</a> &middot; fires <time class="absolute-time" data-timestamp="${t.fireAt}">${escapeHtml(formatFireAt(t.fireAt, timeZone))}</time></span>
     <div style="display:flex;gap:4px;align-items:center;">
       <button class="reschedule-btn" data-id="${escapeHtml(t.id)}">reschedule</button>
       <button class="cancel-btn" data-id="${escapeHtml(t.id)}">cancel</button>
@@ -120,7 +122,7 @@ export function renderScheduleIndex(
 	}).join('\n');
 
 	const upcomingBody = sorted.length ? sections : '<p class="empty" id="empty-msg">No scheduled tasks.</p>';
-	const triggeredBody = renderTriggeredPanel(triggered, retentionDays);
+	const triggeredBody = renderTriggeredPanel(triggered, retentionDays, timeZone);
 	const maxScheduleMs = MAX_SCHEDULE_MS;
 	const delayInvalidMessage = DELAY_INVALID_MESSAGE;
 	const delayMaxMessage = DELAY_MAX_MESSAGE;
@@ -197,7 +199,7 @@ export function renderScheduleIndex(
   .reschedule-confirm-btn:hover { background: rgba(115,201,145,0.22); }
   .reschedule-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .reschedule-error { font-size: 11px; color: #cc6666; }
-  .page-tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--panel-border); margin-bottom: 20px; }
+  .page-tab-bar { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--panel-border); margin-bottom: 20px; }
   .page-tab {
     font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
     color: var(--panel-muted); background: none; border: none; cursor: pointer;
@@ -206,6 +208,15 @@ export function renderScheduleIndex(
   }
   .page-tab:hover { color: var(--panel-accent); }
   .page-tab.active { color: var(--panel-accent); border-bottom-color: var(--panel-accent); }
+  .schedule-display-toggle {
+    margin-left: auto; align-self: center; margin-bottom: 5px;
+    font-size: 11px; color: var(--panel-muted); background: var(--panel-bg);
+    border: 1px solid var(--panel-border); border-radius: 6px; padding: 5px 10px;
+    cursor: pointer; font-family: inherit; transition: color 0.15s, border-color 0.15s;
+  }
+  .schedule-display-toggle:hover, .schedule-display-toggle[aria-pressed="true"] {
+    color: var(--panel-accent); border-color: var(--panel-accent);
+  }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
   .status-pill {
@@ -248,6 +259,7 @@ ${sharedHeader({ commandbarEnabled, title: 'Scheduled' })}
       <div class="page-tab-bar">
         <button class="page-tab active" data-tab="upcoming">Upcoming</button>
         <button class="page-tab" data-tab="triggered">Recently Triggered</button>
+        <button class="schedule-display-toggle" id="schedule-display-toggle" type="button" aria-pressed="${absoluteTimeDefault ? 'true' : 'false'}">${absoluteTimeDefault ? 'Show countdown' : 'Show absolute time'}</button>
       </div>
       <div class="tab-panel active" data-panel="upcoming">
         <div id="schedule-list">${upcomingBody}</div>
@@ -271,6 +283,8 @@ ${newSessionModalScript()}
 
 <script>
 const MAX_SCHEDULE_MS = ${maxScheduleMs};
+const DISPLAY_TIME_ZONE = ${JSON.stringify(timeZone ?? null)};
+let absoluteMode = ${absoluteTimeDefault ? 'true' : 'false'};
 ${scheduleDelayParseScript()}
 
 // ── Tabs ─────────────────────────────────────────────────────────────────
@@ -300,16 +314,57 @@ function formatCountdown(ms) {
   return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
 }
 
+const absoluteTimeFormatter = (() => {
+  const options = {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  };
+  if (DISPLAY_TIME_ZONE) options.timeZone = DISPLAY_TIME_ZONE;
+  try { return new Intl.DateTimeFormat('en-CA', options); }
+  catch { return new Intl.DateTimeFormat('en-CA', { ...options, timeZone: undefined }); }
+})();
+
+function formatAbsoluteTime(timestamp) {
+  const values = Object.fromEntries(absoluteTimeFormatter.formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
+  return values.year + '-' + values.month + '-' + values.day + ' ' + values.hour + ':' + values.minute;
+}
+
+function renderAbsoluteTimes() {
+  document.querySelectorAll('.absolute-time').forEach((el) => {
+    const timestamp = Number(el.dataset.timestamp);
+    if (Number.isFinite(timestamp)) el.textContent = formatAbsoluteTime(timestamp);
+  });
+}
+
+function updateDisplayToggle() {
+  const toggle = document.getElementById('schedule-display-toggle');
+  if (!toggle) return;
+  toggle.setAttribute('aria-pressed', String(absoluteMode));
+  toggle.textContent = absoluteMode ? 'Show countdown' : 'Show absolute time';
+}
+
 function tick() {
   document.querySelectorAll('.countdown').forEach((el) => {
     const fireAt = parseInt(el.dataset.fireAt, 10);
+    if (absoluteMode) {
+      el.textContent = formatAbsoluteTime(fireAt);
+      el.classList.remove('urgent', 'imminent');
+      return;
+    }
     const remaining = fireAt - Date.now();
     el.textContent = formatCountdown(remaining);
     el.classList.remove('urgent', 'imminent');
     if (remaining <= 10000) el.classList.add('imminent');
     else if (remaining <= 60000) el.classList.add('urgent');
   });
+  renderAbsoluteTimes();
 }
+
+document.getElementById('schedule-display-toggle').addEventListener('click', () => {
+  absoluteMode = !absoluteMode;
+  updateDisplayToggle();
+  tick();
+});
 
 function refreshEmptyState() {
   document.querySelectorAll('.session-group').forEach((g) => {
@@ -385,12 +440,10 @@ async function submitReschedule(id, delayStr) {
     if (task) {
       const countdown = task.querySelector('.countdown');
       if (countdown) countdown.dataset.fireAt = String(data.fireAt);
-      const meta = task.querySelector('.meta');
-      if (meta) {
-        const d = new Date(data.fireAt);
-        const win = (meta.textContent.match(/win:(\d+)/) || ['','?'])[1];
-        const time = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        meta.textContent = 'win:' + win + ' · fires ' + time;
+      const absoluteTime = task.querySelector('.absolute-time');
+      if (absoluteTime) {
+        absoluteTime.dataset.timestamp = String(data.fireAt);
+        absoluteTime.textContent = formatAbsoluteTime(data.fireAt);
       }
     }
     closeReschedule(id);

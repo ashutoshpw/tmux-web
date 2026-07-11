@@ -110,12 +110,46 @@ export function schedulerDrawerCSS(): string {
   .sched-task-meta {
     font-size: 10px; color: var(--panel-muted); font-family: 'JetBrains Mono', monospace;
   }
-  .sched-cancel-btn {
+  .sched-task-actions { display: flex; gap: 4px; align-items: center; }
+  .sched-reschedule-btn, .sched-cancel-btn {
     font-size: 10px; color: var(--panel-muted); background: none;
     border: 1px solid var(--panel-border); padding: 2px 8px; border-radius: 4px;
     cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.15s;
   }
+  .sched-reschedule-btn:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  .sched-cancel-btn {
+    flex-shrink: 0;
+  }
   .sched-cancel-btn:hover { border-color: #cc6666; color: #cc6666; }
+  .sched-reschedule-row {
+    display: none; flex-direction: column; gap: 6px;
+    padding-top: 8px; border-top: 1px solid var(--panel-border);
+  }
+  .sched-reschedule-row.active { display: flex; }
+  .sched-reschedule-presets { display: flex; gap: 6px; }
+  .sched-reschedule-preset-btn {
+    font-size: 11px; color: var(--panel-muted); background: none;
+    border: 1px solid var(--panel-border); padding: 3px 10px; border-radius: 6px;
+    cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all 0.15s;
+  }
+  .sched-reschedule-preset-btn:hover { border-color: var(--panel-accent); color: var(--panel-accent); }
+  .sched-reschedule-input-row { display: flex; gap: 8px; align-items: center; }
+  .sched-reschedule-input {
+    flex: 1; min-width: 0; background: rgba(0,0,0,0.3); border: 1px solid var(--panel-border);
+    color: var(--page-fg); font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    padding: 4px 8px; border-radius: 6px; outline: none; transition: border-color 0.15s;
+  }
+  .sched-reschedule-input:focus { border-color: rgba(125,211,252,0.4); }
+  .sched-reschedule-input.error { border-color: #cc6666; }
+  .sched-reschedule-confirm-btn {
+    font-size: 11px; background: rgba(115,201,145,0.12);
+    border: 1px solid var(--panel-success); color: var(--panel-success);
+    padding: 4px 14px; border-radius: 6px; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .sched-reschedule-confirm-btn:hover { background: rgba(115,201,145,0.22); }
+  .sched-reschedule-confirm-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .sched-reschedule-error { font-size: 11px; color: #cc6666; }
   .sched-empty {
     padding: 32px 16px; text-align: center; font-size: 12px;
     color: var(--panel-muted); font-family: 'JetBrains Mono', monospace;
@@ -251,13 +285,54 @@ function renderTaskList(tasks) {
 
     const row2 = el('div', 'sched-task-row2');
     const meta = el('div', 'sched-task-meta', 'win:' + task.windowIndex);
+    const actions = el('div', 'sched-task-actions');
+    const rescheduleBtn = el('button', 'sched-reschedule-btn', 'reschedule');
+    rescheduleBtn.addEventListener('click', () => {
+      const row = item.querySelector('.sched-reschedule-row');
+      if (row && row.classList.contains('active')) closeReschedule(task.id);
+      else openReschedule(task.id);
+    });
     const cancelBtn = el('button', 'sched-cancel-btn', 'cancel');
     cancelBtn.addEventListener('click', () => cancelTask(task.id));
     row2.appendChild(meta);
-    row2.appendChild(cancelBtn);
+    actions.appendChild(rescheduleBtn);
+    actions.appendChild(cancelBtn);
+    row2.appendChild(actions);
+
+    const rescheduleRow = el('div', 'sched-reschedule-row');
+    rescheduleRow.dataset.id = task.id;
+    const presets = el('div', 'sched-reschedule-presets');
+    for (const delay of ['1m', '5m', '15m', '1h']) {
+      const presetBtn = el('button', 'sched-reschedule-preset-btn', delay);
+      presetBtn.addEventListener('click', () => void submitReschedule(task.id, delay));
+      presets.appendChild(presetBtn);
+    }
+    const inputRow = el('div', 'sched-reschedule-input-row');
+    const input = el('input', 'sched-reschedule-input');
+    input.type = 'text';
+    input.placeholder = '1h, 5m, 70h, 30d';
+    input.autocomplete = 'off';
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeReschedule(task.id);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        void submitReschedule(task.id);
+      }
+    });
+    const confirmBtn = el('button', 'sched-reschedule-confirm-btn', 'Set');
+    confirmBtn.addEventListener('click', () => void submitReschedule(task.id));
+    const error = el('span', 'sched-reschedule-error');
+    inputRow.appendChild(input);
+    inputRow.appendChild(confirmBtn);
+    rescheduleRow.appendChild(presets);
+    rescheduleRow.appendChild(inputRow);
+    rescheduleRow.appendChild(error);
 
     item.appendChild(row1);
     item.appendChild(row2);
+    item.appendChild(rescheduleRow);
     list.appendChild(item);
   }
 }
@@ -275,6 +350,76 @@ async function cancelTask(id) {
     await fetch('/api/schedule/' + id, { method: 'DELETE' });
     fetchTasks();
   } catch {}
+}
+
+function openReschedule(id) {
+  document.querySelectorAll('.sched-reschedule-row.active').forEach((row) => {
+    if (row.dataset.id !== id) closeReschedule(row.dataset.id);
+  });
+  const row = getRescheduleRow(id);
+  if (!row) return;
+  row.classList.add('active');
+  const input = row.querySelector('.sched-reschedule-input');
+  input.value = '';
+  input.classList.remove('error');
+  row.querySelector('.sched-reschedule-error').textContent = '';
+  input.focus();
+}
+
+function getRescheduleRow(id) {
+  return document.querySelector('.sched-reschedule-row[data-id="' + id + '"]');
+}
+
+function closeReschedule(id) {
+  const row = getRescheduleRow(id);
+  if (!row) return;
+  row.classList.remove('active');
+  const input = row.querySelector('.sched-reschedule-input');
+  input.value = '';
+  input.classList.remove('error');
+  row.querySelector('.sched-reschedule-error').textContent = '';
+}
+
+async function submitReschedule(id, delayStr) {
+  const row = getRescheduleRow(id);
+  if (!row) return;
+  const input = row.querySelector('.sched-reschedule-input');
+  const error = row.querySelector('.sched-reschedule-error');
+  const confirmBtn = row.querySelector('.sched-reschedule-confirm-btn');
+  const delayMs = parseDelay(delayStr !== undefined ? delayStr : input.value);
+  if (!delayMs) {
+    input.classList.add('error');
+    error.textContent = ${JSON.stringify(delayInvalidMessage)};
+    input.focus();
+    return;
+  }
+  if (delayMs > MAX_SCHEDULE_MS) {
+    input.classList.add('error');
+    error.textContent = ${JSON.stringify(delayMaxMessage)};
+    input.focus();
+    return;
+  }
+  input.classList.remove('error');
+  error.textContent = '';
+  confirmBtn.disabled = true;
+  try {
+    const res = await fetch('/api/schedule/' + id, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delayMs }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      error.textContent = err.error || 'Server error.';
+      return;
+    }
+    closeReschedule(id);
+    await fetchTasks();
+  } catch {
+    error.textContent = 'Network error.';
+  } finally {
+    confirmBtn.disabled = false;
+  }
 }
 
 async function scheduleTask() {

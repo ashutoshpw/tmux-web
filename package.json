@@ -12,8 +12,8 @@
   ],
   "scripts": {
     "postinstall": "node scripts/fix-pty-perms.mjs",
-    "prepublishOnly": "tsc && npm run build:client && npm run build:exts",
-    "build": "tsc && npm run check:drawer-scripts && npm run build:client && npm run build:exts",
+    "prepublishOnly": "tsc && bun run build:client && bun run build:exts",
+    "build": "tsc && bun run check:drawer-scripts && bun run build:client && bun run build:exts",
     "check:drawer-scripts": "tsx scripts/check-drawer-scripts.ts",
     "build:client": "bun scripts/build-client.mjs",
     "typecheck": "tsc --noEmit",
@@ -23,7 +23,7 @@
     "build:exts": "node scripts/build-exts.mjs --force",
     "start": "node dist/index.js",
     "predev": "bun scripts/build-client.mjs && node scripts/build-exts.mjs",
-    "dev": "TMUX_WEB_DEV=1 npx tsx src/index.ts"
+    "dev": "TMUX_WEB_DEV=1 tsx src/index.ts"
   },
   "keywords": [
     "tmux",
@@ -37,9 +37,14 @@
     "type": "git",
     "url": "https://github.com/ashutoshpw/tmux-web"
   },
+  "packageManager": "bun@1.4.2",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "bun": ">=1.4.2"
   },
+  "trustedDependencies": [
+    "node-pty"
+  ],
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",

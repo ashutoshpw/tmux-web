@@ -19,12 +19,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
 
-      # The client bundle (npm run build:client) is built with bun.
+      # bun is the package manager / script runner (min v1.4.2, see packageManager
+      # in package.json); the server itself still runs on Node.
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
 
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build

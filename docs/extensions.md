@@ -274,13 +274,15 @@ tmux-web/
         └── ui/
 ```
 
-The host's resolver checks `extensions/` first (highest priority), so local code overrides any installed npm version with the same id. `npm run dev` from the tmux-web repo rebuilds the extension automatically via the `predev` hook.
+The host's resolver checks `extensions/` first (highest priority), so local code overrides any installed npm version with the same id. `bun run dev` from the tmux-web repo rebuilds the extension automatically via the `predev` hook.
 
 ### Publishing
 
 ```bash
 cd my-extension
 npm publish --access public   # --access is required for scoped names
+# or, if you use bun locally:
+bun publish --access public
 ```
 
 Users install via:

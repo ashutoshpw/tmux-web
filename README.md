@@ -8,10 +8,12 @@ Access your tmux sessions from the browser. A lightweight web server that lists 
 npm install -g tmux-web
 ```
 
-Or run directly with npx:
+Or run directly with npx / bunx:
 
 ```bash
 npx tmux-web
+# or
+bunx tmux-web
 ```
 
 ## Usage

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Build shared packages under packages/, then every extension under extensions/.
-//   - `--force`: always rebuild (used by `npm run build`)
+//   - `--force`: always rebuild (used by `bun run build`)
 //   - default:   only build if `dist/` is missing (used by `predev`)
 import { readdirSync, existsSync, statSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -14,15 +14,15 @@ const extsDir    = path.join(root, 'extensions');
 function buildPackageDir(dir, tag) {
   const hasDist = existsSync(path.join(dir, 'dist'));
   if (hasDist && !force) {
-    console.log(`${tag} dist present — skipping (use \`npm run build:exts\` to rebuild)`);
+    console.log(`${tag} dist present — skipping (use \`bun run build:exts\` to rebuild)`);
     return;
   }
   if (!existsSync(path.join(dir, 'node_modules')) || force) {
     console.log(`${tag} installing deps…`);
-    execFileSync('npm', ['install'], { cwd: dir, stdio: 'inherit' });
+    execFileSync('bun', ['install'], { cwd: dir, stdio: 'inherit' });
   }
   console.log(`${tag} building…`);
-  execFileSync('npm', ['run', 'build'], { cwd: dir, stdio: 'inherit' });
+  execFileSync('bun', ['run', 'build'], { cwd: dir, stdio: 'inherit' });
 }
 
 if (existsSync(packagesDir)) {

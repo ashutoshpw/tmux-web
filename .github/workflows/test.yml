@@ -40,6 +40,9 @@ jobs:
       # Fails on unused files, dependencies, and duplicate exports (see knip.jsonc).
       - run: bun run knip
 
+      # Lints all workspaces (src, packages, extensions) with default rules.
+      - run: bun run lint
+
       # No thresholds yet — the server entry needs a pty/tmux to exercise, so
       # overall numbers are low. Report is published so trends stay visible.
       - name: Test with coverage

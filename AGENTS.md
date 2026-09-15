@@ -18,6 +18,7 @@ scheduler, plus sandboxed sidebar extensions.
 | `bun run typecheck:exts`  | Typecheck `packages/` and `extensions/` workspaces   |
 | `bun run test`            | Vitest suite (`tests/`, `packages/*/tests/`)         |
 | `bun run knip`            | Unused files/exports/deps audit (CI-enforced)        |
+| `bun run lint`            | oxlint over all workspaces                           |
 | `bun run build`           | Full build incl. extensions                          |
 | `bun run verify:dist`     | Assert publishable artifacts exist                   |
 

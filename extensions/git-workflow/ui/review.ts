@@ -76,7 +76,6 @@ const ext = createExtension();
 let currentSession = '';
 let currentContext: ReviewContext | null = null;
 let changedFiles: ChangedFileSummary[] = [];
-let currentHead = '';
 let currentMode: ViewMode = 'diff';
 let selectedPath = '';
 let currentDiffPath = '';
@@ -549,7 +548,6 @@ async function selectPathFromUi(path: string, preferredMode?: ViewMode) {
 async function refreshContext(preserveSelection = true) {
   const result = await ext.request<ContextResponse>(`/review/context?session=${encodeURIComponent(currentSession)}`);
   currentContext = result.context;
-  currentHead = result.currentHead;
   changedFiles = result.files;
 
   const repoLabel = document.getElementById('repo-label');
@@ -720,7 +718,7 @@ async function loadPanel() {
     expandedDirs.clear();
     expandedDirs.add('');
     await refreshContext(false);
-  } catch (error) {
+  } catch {
     setBanner('Failed to load review context. Open Review Files from the sidebar first.', 'error');
   }
 }

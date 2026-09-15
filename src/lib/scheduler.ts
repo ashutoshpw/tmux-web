@@ -210,6 +210,8 @@ export class SchedulerService {
 
 	/** Visible for tests that need to trigger a scan without waiting for the interval. */
 	scanPending(): void {
+		// Snapshot: disarm/fireTask below can mutate the map mid-iteration.
+		// oxlint-disable-next-line unicorn/no-useless-spread -- the copy is the point
 		for (const task of [...this.scheduledTasks.values()]) {
 			const remaining = task.fireAt - this.now();
 			if (remaining <= 0) {

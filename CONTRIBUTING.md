@@ -22,6 +22,7 @@ bun run dev          # build client + extensions, then start the dev server
 | `bun run coverage`      | Vitest with v8 coverage report                      |
 | `bun run build`         | Full build (drawer check, client, extensions, dist) |
 | `bun run knip`          | Unused files/exports/dependencies audit             |
+| `bun run lint`          | oxlint over all workspaces (`lint:fix` auto-fixes)  |
 | `bun run verify:dist`   | Assert the published build artifacts exist          |
 
 CI runs the full set on every PR — please make sure they pass locally first.

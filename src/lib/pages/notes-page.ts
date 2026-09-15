@@ -11,7 +11,7 @@ export function renderNotesPage(session: string, theme: TmuxWebTheme, commandbar
 	const label = isGlobal ? 'Global' : session;
 	const scope = isGlobal ? '__global__' : 'session:' + session;
 	const backHref = '/notes';
-	const exportName = isGlobal ? 'notes-global' : 'notes-session-' + session.replace(/[:\/\\]/g, '-');
+	const exportName = isGlobal ? 'notes-global' : 'notes-session-' + session.replace(/[:/\\]/g, '-');
 	const scopeJs = JSON.stringify(scope);
 	const exportNameJs = JSON.stringify(`${exportName}.md`);
 	const labelHtml = escapeHtml(label);

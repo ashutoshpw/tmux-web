@@ -12,7 +12,7 @@ export interface ExtManifest {
   id:          string;
   name:        string;
   icon:        string;
-  slot:        'sidebar' | 'panel';
+  slot:        'sidebar' | 'panel' | 'background';
   permissions: string[];
   views:       Array<{ entry: string }>;
   panel?: {
@@ -22,6 +22,12 @@ export interface ExtManifest {
   };
   start?:      string;
   config:      unknown;
+  capabilities?: {
+    imageUploadProcessor?: {
+      endpoint: string;
+      timeoutMs?: number;
+    };
+  };
   /** Absolute path to the extension root directory (set by loader, not from JSON). */
   dir:         string;
   /** Unix socket path assigned at runtime — not in JSON. */
@@ -130,12 +136,13 @@ export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): Ch
   return child;
 }
 
-function socketProxy(
+export function requestExtensionBackend(
   sockPath: string,
   method:   string,
   reqPath:  string,
   headers:  Record<string, string>,
   body?:    Buffer,
+  timeoutMs?: number,
 ): Promise<{ status: number; contentType: string; body: Buffer }> {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath: sockPath, path: reqPath, method, headers }, (res) => {
@@ -148,6 +155,11 @@ function socketProxy(
       }));
     });
     req.on('error', reject);
+    if (timeoutMs && timeoutMs > 0) {
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`extension request timed out after ${timeoutMs}ms`));
+      });
+    }
     if (body?.length) req.write(body);
     req.end();
   });
@@ -202,7 +214,7 @@ export function registerExtensionRoutes(
         [...c.req.raw.headers.entries()].filter(([k]) => k !== 'host'),
       );
 
-      const result = await socketProxy(socket, c.req.method, reqPath, headers, bodyBuf);
+      const result = await requestExtensionBackend(socket, c.req.method, reqPath, headers, bodyBuf);
       return c.body(result.body.buffer.slice(result.body.byteOffset, result.body.byteOffset + result.body.byteLength) as ArrayBuffer, result.status as any, { 'Content-Type': result.contentType });
     });
   }

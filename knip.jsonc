@@ -14,6 +14,7 @@
     "extensions/git-workflow/ui/review.ts",
     "extensions/github-actions/backend/server.ts",
     "extensions/github-actions/ui/app.ts",
+    "extensions/image-compressor/backend/server.ts",
     "packages/ext-sdk/src/index.ts",
     "packages/ext-gh-workflow/src/index.ts"
   ],
@@ -28,7 +29,8 @@
     "@tmux-web/ext-gh-workflow",
     "@codemirror/state",
     "@codemirror/view",
-    "codemirror"
+    "codemirror",
+    "sharp"
   ],
   // Exported types are part of the extension API contracts even before they
   // have consumers inside this repo (same stance as the t3code reference).

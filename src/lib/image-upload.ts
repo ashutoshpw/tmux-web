@@ -49,6 +49,29 @@ function sanitizeFilename(name: string): string {
 	return path.basename(name).replace(/[^a-zA-Z0-9._-]/g, '_') || 'upload';
 }
 
+export function validateUploadedImage(
+	data: Buffer,
+	declaredMime?: string,
+): { mime: string; ext: string } {
+	if (data.length === 0) {
+		throw new ImageUploadError('empty file', 400);
+	}
+	if (data.length > MAX_UPLOAD_BYTES) {
+		throw new ImageUploadError(`file exceeds ${MAX_UPLOAD_BYTES} bytes`, 413);
+	}
+
+	const normalized = declaredMime?.split(';')[0]?.trim().toLowerCase();
+	const sniffed = sniffImageMime(data);
+	if (normalized && IMAGE_MIME_TO_EXT[normalized]) {
+		if (sniffed && sniffed !== normalized) {
+			throw new ImageUploadError('file content does not match declared type', 400);
+		}
+		return { mime: normalized, ext: IMAGE_MIME_TO_EXT[normalized] };
+	}
+	if (sniffed) return { mime: sniffed, ext: IMAGE_MIME_TO_EXT[sniffed] };
+	throw new ImageUploadError('unsupported image type', 400);
+}
+
 function localDateFolder(): string {
 	const d = new Date();
 	const y = d.getFullYear();

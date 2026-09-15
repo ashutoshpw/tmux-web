@@ -1,0 +1,33 @@
+{
+  "name": "@tmux-web/ext-image-compressor",
+  "version": "0.1.0",
+  "description": "Background image upload compression extension for tmux-web",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ashutoshpw/tmux-web",
+    "directory": "extensions/image-compressor"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/",
+    "tmux-extension.json"
+  ],
+  "scripts": {
+    "build:backend": "tsc -p tsconfig.json",
+    "build": "npm run build:backend",
+    "start": "node dist/backend/server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.0",
+    "hono": "^4.7.0",
+    "sharp": "^0.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.8.0",
+    "typescript": "^5.7.0"
+  }
+}

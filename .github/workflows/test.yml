@@ -6,9 +6,20 @@ on:
     branches:
       - main
 
+# Least privilege: read-only token; publishing gets its own scoped workflow.
+permissions:
+  contents: read
+
+# One run per PR (latest push wins); pushes to main are keyed per-commit so
+# concurrent merges are never canceled.
+concurrency:
+  group: test-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
       matrix:
         node-version: [22, 24]

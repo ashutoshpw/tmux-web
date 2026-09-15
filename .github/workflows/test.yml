@@ -41,3 +41,5 @@ jobs:
       - run: bun run typecheck
       - run: bun run test
       - run: bun run build
+      # Same artifact checks publish.yml enforces, so a bad build fails on PRs.
+      - run: bun run verify:dist

@@ -15,6 +15,7 @@
     "prepublishOnly": "tsc && bun run build:client && bun run build:exts",
     "build": "tsc && bun run check:drawer-scripts && bun run build:client && bun run build:exts",
     "check:drawer-scripts": "tsx scripts/check-drawer-scripts.ts",
+    "verify:dist": "node scripts/verify-dist.mjs",
     "build:client": "bun scripts/build-client.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

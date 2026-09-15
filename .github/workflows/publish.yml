@@ -5,9 +5,23 @@ on:
     tags:
       - "v*"
 
+# Least privilege: only the publish job gets id-token (npm provenance).
+permissions:
+  contents: read
+
+# Serialize publishes so overlapping tag pushes can never race to npm or
+# publish out of order. Running publishes are never canceled, and queue: max
+# keeps every pending run instead of the default newest-wins single slot, so
+# a queued tag can never be silently dropped.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       id-token: write # required for npm provenance
@@ -15,19 +29,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # bun is the package manager / script runner (min v1.4.2, see packageManager
+      # in package.json); the server itself still runs on Node.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
 
-      # The client bundle (npm run build:client) is built with bun.
-      - uses: oven-sh/setup-bun@v2
+      # `npm ci` is not an option here: the repo has no package-lock.json,
+      # only bun.lock. npm publish still handles auth + provenance below.
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run test
+      - run: bun run build
 
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      # Fail on missing/empty build artifacts before anything hits npm.
+      - run: bun run verify:dist
+
+      # Refuse to publish a version that already exists on npm (re-tagging an
+      # old commit would otherwise mutate a released version).
+      - name: Guard against republishing an existing version
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          if npm view "tmux-web@$VERSION" version >/dev/null 2>&1; then
+            echo "::error::tmux-web@$VERSION is already published; bump the version before tagging."
+            exit 1
+          fi
 
       # `prepublishOnly` (tsc + client/exts builds) runs automatically here.
       - run: npm publish --provenance

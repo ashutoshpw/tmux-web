@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run — validate the full release path without publishing"
+        type: boolean
+        required: false
+        default: true
 
 # Least privilege: only the publish job gets id-token (npm provenance).
 permissions:
@@ -12,7 +19,8 @@ permissions:
 # Serialize publishes so overlapping tag pushes can never race to npm or
 # publish out of order. Running publishes are never canceled, and queue: max
 # keeps every pending run instead of the default newest-wins single slot, so
-# a queued tag can never be silently dropped.
+# a queued tag can never be silently dropped. Dry runs share the group on
+# purpose: they must not interleave with a real publish.
 concurrency:
   group: publish
   cancel-in-progress: false
@@ -23,7 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read
+      # write: creates the GitHub Release on a real tag publish.
+      contents: write
       id-token: write # required for npm provenance
 
     steps:
@@ -60,7 +69,22 @@ jobs:
             exit 1
           fi
 
-      # `prepublishOnly` (tsc + client/exts builds) runs automatically here.
-      - run: npm publish --provenance
+      # Dry runs exercise the identical pipeline (prepublishOnly included) and
+      # end at `npm publish --dry-run`, which needs no auth — so the release
+      # path stays continuously validated without burning a version.
+      - name: Publish to npm (dry run)
+        if: inputs.dry_run
+        run: npm publish --dry-run
+
+      - name: Publish to npm
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Generated notes cover commits since the previous tag.
+      - name: Create GitHub release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v3
+        with:
+          generate_release_notes: true

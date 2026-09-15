@@ -1,0 +1,3 @@
+# Normalize line endings: git autocrlf=true converts LF to CRLF on Windows,
+# which breaks shell scripts and sha-stable builds.
+* text=auto eol=lf

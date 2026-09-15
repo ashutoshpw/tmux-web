@@ -19,6 +19,7 @@
     "knip": "knip",
     "build:client": "bun scripts/build-client.mjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:exts": "node scripts/typecheck-exts.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",

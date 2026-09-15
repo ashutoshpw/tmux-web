@@ -17,6 +17,7 @@ bun run dev          # build client + extensions, then start the dev server
 | ----------------------- | --------------------------------------------------- |
 | `bun run dev`           | Build client/extensions and run the server (tsx)    |
 | `bun run typecheck`     | `tsc --noEmit`                                      |
+| `bun run typecheck:exts` | Typecheck packages/ and extensions/ workspaces      |
 | `bun run test`          | Vitest suite                                        |
 | `bun run coverage`      | Vitest with v8 coverage report                      |
 | `bun run build`         | Full build (drawer check, client, extensions, dist) |

@@ -33,6 +33,10 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # Root typecheck only covers src/; this catches extension type errors
+      # early (installs each workspace's deps when missing).
+      - run: bun run typecheck:exts
+
       # Fails on unused files, dependencies, and duplicate exports (see knip.jsonc).
       - run: bun run knip
 

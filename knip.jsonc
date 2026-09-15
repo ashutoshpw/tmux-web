@@ -17,9 +17,15 @@
     "packages/ext-sdk/src/index.ts",
     "packages/ext-gh-workflow/src/index.ts"
   ],
-  // Extension-local UI deps resolved from the extensions' own node_modules
-  // (they have their own package.json files, invisible to root-level knip).
+  // Deps declared in the extensions' own package.json files, invisible to
+  // root-level knip: the @tmux-web/* file: deps resolve only once the
+  // extensions' node_modules are installed (fresh CI checkouts don't have
+  // them until build:exts runs), and the codemirror UI deps likewise.
+  // Do NOT remove these based on local-only knip hints — locally the
+  // extension node_modules exist, in CI they do not.
   "ignoreDependencies": [
+    "@tmux-web/ext-sdk",
+    "@tmux-web/ext-gh-workflow",
     "@codemirror/state",
     "@codemirror/view",
     "codemirror"

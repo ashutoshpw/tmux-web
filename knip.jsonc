@@ -1,0 +1,30 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Entry points knip cannot infer from imports:
+  //   - src/browser/terminal-client.ts  bundled by scripts/build-client.mjs
+  //   - extensions/*            loaded at runtime via tmux-extension.json
+  //                             manifests; backends run as `node dist/backend/server.js`,
+  //                             UI files are esbuild entrypoints
+  //   - packages/*              consumed by extensions via file: deps
+  // (src/index.ts and scripts/* are auto-detected from package.json.)
+  "entry": [
+    "src/browser/terminal-client.ts",
+    "extensions/git-workflow/backend/server.ts",
+    "extensions/git-workflow/ui/app.ts",
+    "extensions/git-workflow/ui/review.ts",
+    "extensions/github-actions/backend/server.ts",
+    "extensions/github-actions/ui/app.ts",
+    "packages/ext-sdk/src/index.ts",
+    "packages/ext-gh-workflow/src/index.ts"
+  ],
+  // Extension-local UI deps resolved from the extensions' own node_modules
+  // (they have their own package.json files, invisible to root-level knip).
+  "ignoreDependencies": [
+    "@codemirror/state",
+    "@codemirror/view",
+    "codemirror"
+  ],
+  // Exported types are part of the extension API contracts even before they
+  // have consumers inside this repo (same stance as the t3code reference).
+  "rules": { "types": "off", "nsTypes": "off" }
+}

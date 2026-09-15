@@ -46,12 +46,3 @@ export async function promptChoice(
     rl.close();
   }
 }
-
-export async function promptSecret(label: string): Promise<string> {
-  const rl = readline.createInterface({ input, output });
-  try {
-    return (await rl.question(`${label}: `)).trim();
-  } finally {
-    rl.close();
-  }
-}

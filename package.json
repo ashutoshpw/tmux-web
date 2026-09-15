@@ -16,6 +16,7 @@
     "build": "tsc && bun run check:drawer-scripts && bun run build:client && bun run build:exts",
     "check:drawer-scripts": "tsx scripts/check-drawer-scripts.ts",
     "verify:dist": "node scripts/verify-dist.mjs",
+    "knip": "knip",
     "build:client": "bun scripts/build-client.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -59,6 +60,7 @@
     "@types/node": "^25.8.0",
     "@types/ws": "^8.5.0",
     "@vitest/coverage-v8": "^2.1.9",
+    "knip": "^6.35.1",
     "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.9"

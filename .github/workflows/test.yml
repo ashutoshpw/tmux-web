@@ -17,6 +17,37 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Dead-code/dependency audit + coverage run once (no point paying the
+  # Node matrix for checks that don't vary by Node version).
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # bun is the package manager / script runner (min v1.4.2, see packageManager
+      # in package.json); the server itself still runs on Node.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - run: bun install --frozen-lockfile
+
+      # Fails on unused files, dependencies, and duplicate exports (see knip.jsonc).
+      - run: bun run knip
+
+      # No thresholds yet — the server entry needs a pty/tmux to exercise, so
+      # overall numbers are low. Report is published so trends stay visible.
+      - name: Test with coverage
+        run: NO_COLOR=1 bun run coverage 2>&1 | tee "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          if-no-files-found: error
+
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10

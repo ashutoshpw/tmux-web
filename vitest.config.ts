@@ -7,6 +7,8 @@ export default defineConfig({
 		coverage: {
 			provider: 'v8',
 			reportsDirectory: 'coverage',
+			// Text table lands in the CI step summary; lcov goes to the uploaded artifact.
+			reporter: ['text', 'lcov'],
 		},
 	},
 });

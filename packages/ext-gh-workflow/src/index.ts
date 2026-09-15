@@ -10,7 +10,6 @@ export {
 export {
   __setExecFileForRepoTests,
   ghRepoView,
-  ghRepoViewFromDir,
   type GhRepoInfo,
 } from './gh-repo.js';
 

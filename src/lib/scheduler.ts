@@ -36,7 +36,7 @@ export interface SchedulerDeps {
 	historyRetentionMs?: number;
 }
 
-export function sendTmuxKeys(sessionName: string, windowIndex: number, text: string): void {
+function sendTmuxKeys(sessionName: string, windowIndex: number, text: string): void {
 	const target = `${sessionName}:${windowIndex}`;
 	execFileSync('tmux', ['send-keys', '-t', target, '-l', text], { timeout: 5000 });
 	execFileSync('tmux', ['send-keys', '-t', target, 'Enter'], { timeout: 5000 });

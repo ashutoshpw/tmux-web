@@ -24,7 +24,7 @@ function isValidTheme(data: unknown): data is TmuxWebTheme {
 	);
 }
 
-export async function writeActiveTheme(theme: TmuxWebTheme): Promise<void> {
+async function writeActiveTheme(theme: TmuxWebTheme): Promise<void> {
 	await mkdir(path.dirname(THEME_PATH), { recursive: true });
 	await writeFile(THEME_PATH, JSON.stringify(theme, null, 2) + '\n');
 }

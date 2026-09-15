@@ -66,6 +66,3 @@ export async function ghRepoView(cwd: string): Promise<GhRepoInfo | null> {
     return null;
   }
 }
-
-/** @deprecated use ghRepoView */
-export const ghRepoViewFromDir = ghRepoView;

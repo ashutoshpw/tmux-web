@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 
 export const GITHUB_ACTIONS_PKG = '@tmux-web/ext-github-actions';
-export const GIT_WORKFLOW_PKG = '@tmux-web/ext-git-workflow';
+const GIT_WORKFLOW_PKG = '@tmux-web/ext-git-workflow';
 
 export type SetupFeature = {
   id: string;

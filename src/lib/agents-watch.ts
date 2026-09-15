@@ -209,10 +209,6 @@ export function getCachedAgentStatuses(): AgentStatus[] {
 	return cache;
 }
 
-export function isBackgroundWatchRunning(): boolean {
-	return watchTimer !== null;
-}
-
 /**
  * Request an out-of-band probe in response to a structural tmux event (a window
  * added, or the active window switched — places a new agent could appear).
@@ -246,16 +242,4 @@ export function startBackgroundWatch(intervalMs = 3500): void {
 	watchTimer = setInterval(runProbe, intervalMs);
 	// Don't keep the process alive solely for this timer.
 	if (typeof watchTimer.unref === 'function') watchTimer.unref();
-}
-
-export function stopBackgroundWatch(): void {
-	if (watchTimer) {
-		clearInterval(watchTimer);
-		watchTimer = null;
-	}
-	if (pendingProbe) {
-		clearTimeout(pendingProbe);
-		pendingProbe = null;
-	}
-	cache = [];
 }

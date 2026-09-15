@@ -26,11 +26,6 @@ export interface ReviewDirectoryEntry {
   changed: boolean;
 }
 
-export interface FileTokenInfo {
-  token: string;
-  size: number;
-}
-
 function runGit(args: string[], cwd: string, allowFailure = false): GitExecResult {
   const result = spawnSync('git', args, {
     cwd,
@@ -171,7 +166,7 @@ export function currentHead(repoRootPath: string): string {
   return git(['rev-parse', 'HEAD'], repoRootPath);
 }
 
-export function worktreeRootDir(): string {
+function worktreeRootDir(): string {
   return path.join(os.homedir(), '.worktrees');
 }
 
@@ -438,12 +433,6 @@ export function getUnifiedDiff(repoRootPath: string, relativePath: string, statu
     return runGit(['diff', '--no-index', '--', '/dev/null', absolutePath], repoRootPath, true).stdout;
   }
   return runGit(['diff', '--find-renames', 'HEAD', '--', relativePath], repoRootPath, true).stdout;
-}
-
-export function getFileToken(repoRootPath: string, relativePath: string): FileTokenInfo {
-  const { absolutePath } = resolveRepoPath(repoRootPath, relativePath);
-  const buffer = readFileSync(absolutePath);
-  return { token: buildToken(buffer), size: buffer.byteLength };
 }
 
 export function readTextFile(repoRootPath: string, relativePath: string): {

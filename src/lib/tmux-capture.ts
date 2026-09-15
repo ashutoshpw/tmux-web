@@ -32,7 +32,7 @@ export function getSessionPaneTarget(sessionName: string): string {
 }
 
 /** Lines in the pane scrollback history (not including visible screen). */
-export function getPaneHistorySize(target: string): number {
+function getPaneHistorySize(target: string): number {
 	const raw = tmux(["display-message", "-p", "-t", target, "#{history_size}"]);
 	const n = parseInt(raw, 10);
 	return Number.isFinite(n) ? n : 0;

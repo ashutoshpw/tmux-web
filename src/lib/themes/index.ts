@@ -3,7 +3,6 @@ import { vscodeTheme } from './vscode.js';
 import type { ThemeTemplateId, TmuxWebTheme } from './types.js';
 
 export type { ShellTheme, TerminalTheme, ThemeTemplateId, TmuxWebTheme } from './types.js';
-export { ghosttyTheme } from './ghostty.js';
 export { vscodeTheme } from './vscode.js';
 
 const TEMPLATES: Record<ThemeTemplateId, TmuxWebTheme> = {

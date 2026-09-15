@@ -2,7 +2,7 @@ import { db, type WatchedPaneRecord } from './db.js';
 
 /** Max panes we remember / watch. Keeps compute bounded (one ps snapshot +
  * one capture-pane per watched pane per probe). */
-export const MAX_WATCHED_PANES = 50;
+const MAX_WATCHED_PANES = 50;
 
 /**
  * Record a pane the user just navigated to. Dedupes by stable `paneId`,

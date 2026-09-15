@@ -67,7 +67,7 @@ export function getPluginDir(): string {
 // a leading dash that could be read as an npm flag. Versions/tags (pkg@1.2.3) allowed.
 const VALID_PKG = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(@[\w.^~*>=<.-]+)?$/i;
 
-export function isValidPackageName(pkg: string): boolean {
+function isValidPackageName(pkg: string): boolean {
   return typeof pkg === 'string' && pkg.length > 0 && pkg.length <= 214 && VALID_PKG.test(pkg);
 }
 

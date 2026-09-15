@@ -1,7 +1,7 @@
 import { db, type WindowHistoryRecord } from './db.js';
 
 /** Max history entries we keep. Bounds the db + the page render. */
-export const MAX_WINDOW_HISTORY = 200;
+const MAX_WINDOW_HISTORY = 200;
 
 /**
  * Record a window the user just landed on. Dedupes by `sessionName + windowName`

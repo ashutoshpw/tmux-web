@@ -17,6 +17,9 @@ bun.lockb
 # TypeScript
 *.tsbuildinfo
 
+# Coverage output
+coverage/
+
 # Environment files
 .env
 .env.*

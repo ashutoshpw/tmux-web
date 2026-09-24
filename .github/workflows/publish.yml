@@ -47,7 +47,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
+
+      - name: Install npm with trusted publishing support
+        run: npm install --global "npm@^11.5.1"
 
       # `npm ci` is not an option here: the repo has no package-lock.json,
       # only bun.lock. npm publish still handles auth + provenance below.
@@ -79,8 +81,6 @@ jobs:
       - name: Publish to npm
         if: github.event_name == 'push' || inputs.dry_run == false
         run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Generated notes cover commits since the previous tag.
       - name: Create GitHub release

@@ -200,7 +200,9 @@ export function printUsage(): void {
   console.log(`tmux-web — terminal-in-the-browser for tmux
 
 Usage:
-  tmux-web                       Start the server (PORT env var, default 3000)
+  tmux-web                       Start the server (TMUX_WEB_HOST/TMUX_WEB_PORT, default 127.0.0.1:5001)
+  tmux-web --host <address>      Bind to a specific address
+  tmux-web --port <port>         Listen on a specific port
   tmux-web --ghostty             Start with ghostty-web instead of xterm.js
   tmux-web --xterm               Start with xterm.js explicitly
   tmux-web -V, --version         Print version and exit
@@ -213,6 +215,10 @@ Usage:
   tmux-web theme list            List available themes
   tmux-web theme set <name>      Set active theme (vscode, ghostty)
   tmux-web theme show            Show active theme
+  tmux-web service install       Install the user service (systemd or launchd)
+  tmux-web service status        Show service status and log location
+  tmux-web service restart       Restart the user service
+  tmux-web service uninstall     Remove the user service registration
 
 Files:
   ${CONFIG_DISPLAY}   settings (plugins, commandbar)
@@ -223,6 +229,9 @@ Files:
 Most of these are also editable from the browser at /settings and /settings/theme.
 
 Env:
+  TMUX_WEB_HOST=127.0.0.1        Bind address
+  TMUX_WEB_PORT=5001             Listen port
+  PORT=5001                      Legacy port fallback
   TMUX_WEB_TERMINAL_RENDERER=xterm|ghostty   (also persistable via /settings)
 `);
 }

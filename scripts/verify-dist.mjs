@@ -21,11 +21,12 @@ async function assertNonEmpty(relPath) {
 }
 
 // `bin` entry (shebang must survive tsc, or `npx tmux-web` fails).
-const binPath = await assertNonEmpty('dist/index.js');
+const binPath = await assertNonEmpty('dist/cli.js');
 const bin = await readFile(binPath, 'utf8');
 if (!bin.startsWith('#!')) {
-	throw new Error('dist/index.js is missing the #!/usr/bin/env node shebang');
+	throw new Error('dist/cli.js is missing the #!/usr/bin/env node shebang');
 }
+await assertNonEmpty('dist/index.js');
 
 // Browser client bundle and its stylesheet, emitted by scripts/build-client.mjs.
 await assertNonEmpty('dist/assets/terminal-client.js');
@@ -35,7 +36,8 @@ await assertNonEmpty('dist/assets/xterm.css');
 await assertNonEmpty('scripts/fix-pty-perms.mjs');
 
 console.log('dist verification passed:');
-console.log('  - dist/index.js (bin, shebang present)');
+console.log('  - dist/cli.js (bin, shebang present)');
+console.log('  - dist/index.js (server entry)');
 console.log('  - dist/assets/terminal-client.js');
 console.log('  - dist/assets/xterm.css');
 console.log('  - scripts/fix-pty-perms.mjs');

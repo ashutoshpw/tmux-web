@@ -1,12 +1,15 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Hono } from 'hono';
 import { getDataRoot, getExtensionDataDir, getPluginDir } from './state-paths.js';
 import { readSettings } from './settings.js';
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export interface ExtManifest {
   id:          string;
@@ -65,10 +68,9 @@ async function tryLoadManifest(extDir: string): Promise<ExtManifest | null> {
 
 function resolvePluginDir(pkgName: string): string | null {
   // Canonical: <data root>/node_modules/ — managed by `tmux-web add`.
-  // Fallback: <cwd>/node_modules/ — for project-local development.
   const searchPaths = [
     getPluginDir(),
-    path.join(process.cwd(), 'node_modules'),
+    path.join(packageRoot, 'node_modules'),
   ];
   for (const base of searchPaths) {
     const dir = path.join(base, pkgName);
@@ -113,7 +115,7 @@ export async function loadExtensions(extsDir: string): Promise<ExtManifest[]> {
 }
 
 export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): ChildProcess {
-  const sockPath = path.join(os.tmpdir(), `tmux-web-ext-${manifest.id}.sock`);
+  const sockPath = path.join(os.tmpdir(), `tmux-web-ext-${process.pid}-${manifest.id}.sock`);
   const dataDir  = getExtensionDataDir(manifest.id);
   const dataRoot = getDataRoot();
   mkdirSync(dataDir, { recursive: true });
@@ -124,16 +126,28 @@ export function spawnExtensionBackend(extDir: string, manifest: ExtManifest): Ch
     cwd: extDir,
     env: { ...process.env, TMUX_WEB_DATA_ROOT: dataRoot, EXT_SOCKET: sockPath, EXT_DATA_DIR: dataDir },
     stdio: 'pipe',
+    detached: process.platform !== 'win32',
   });
 
   const prefix = `[ext:${manifest.id}]`;
   child.stdout?.on('data', (d: Buffer) => process.stdout.write(`${prefix} ${d}`));
   child.stderr?.on('data', (d: Buffer) => process.stderr.write(`${prefix} ${d}`));
   child.on('exit', (code) => {
+    try { unlinkSync(sockPath); } catch {}
     if (code !== 0) console.warn(`${prefix} exited with code ${code}`);
   });
 
   return child;
+}
+
+export function terminateExtensionBackend(child: ChildProcess, signal: NodeJS.Signals = 'SIGTERM'): void {
+  if (process.platform !== 'win32' && typeof child.pid === 'number') {
+    try {
+      process.kill(-child.pid, signal);
+      return;
+    } catch {}
+  }
+  try { child.kill(signal); } catch {}
 }
 
 export function requestExtensionBackend(

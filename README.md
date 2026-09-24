@@ -22,10 +22,13 @@ bunx tmux-web
 # Interactive setup (command bar, GitHub Actions, Git Workflow — uses `gh auth login`, no token file needed locally)
 tmux-web setup
 
-# Start on default port 3000
+# Start on default port 5001
 tmux-web
 
-# Custom port
+# Custom address and port
+TMUX_WEB_HOST=127.0.0.1 TMUX_WEB_PORT=8080 tmux-web
+
+# Custom port using the legacy variable
 PORT=8080 tmux-web
 
 # Use the default xterm.js renderer
@@ -41,7 +44,9 @@ TMUX_WEB_TERMINAL_RENDERER=ghostty tmux-web
 TMUX_WEB_INITIAL_LINES=1000 TMUX_WEB_HISTORY_CHUNK=500 tmux-web
 ```
 
-Then open `http://localhost:3000` in your browser. You'll see a list of active tmux sessions — click one to attach.
+Then open `http://127.0.0.1:5001` in your browser. You'll see a list of active tmux sessions — click one to attach.
+
+For a persistent user service on Linux or macOS, see [Background service](docs/service.md). The service defaults to loopback; non-loopback binds are unauthenticated and require `--allow-remote` during installation.
 
 Secrets in `~/.tmux-web/.env` are loaded automatically when you run `tmux-web`. GitHub sidebar extensions (Actions, Git Workflow) use the [GitHub CLI](https://cli.github.com/) — run `gh auth login` once on the host; no token file is required for normal local use. For headless or server deployments, set `GH_TOKEN` in `.env` instead.
 
@@ -56,6 +61,7 @@ The terminal renderer defaults to xterm.js. Start with `--ghostty` or set `TMUX_
 - [Extensions](docs/extensions.md) — install, configure, and build sidebar plugins
 - [Git Workflow](docs/extensions/git-workflow.md) — git status, worktree handoff, commit/push
 - [Architecture](docs/architecture.md) — how the server, terminal, and extensions connect
+- [Background service](docs/service.md) — systemd and launchd installation
 
 ## Prerequisites
 

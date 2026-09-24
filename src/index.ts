@@ -29,7 +29,7 @@ import { renderLanding, renderTerminal, renderNotesIndex, renderNotesPage, rende
 import { db } from "./lib/db.js";
 import { recordSessionAccess, getSessionAccessMap } from "./lib/session-access.js";
 import { listWindowHistory, clearWindowHistory } from "./lib/window-history.js";
-import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes } from "./lib/ext-loader.js";
+import { loadExtensions, spawnExtensionBackend, registerExtensionRoutes, terminateExtensionBackend } from "./lib/ext-loader.js";
 import { SchedulerService, isValidScheduleInput, isValidRescheduleInput } from "./lib/scheduler.js";
 import { getScheduleDelayError } from "./lib/schedule-delay.js";
 import { handleClientMessage } from "./lib/ws-message.js";
@@ -71,9 +71,11 @@ import { recordWatchedPane } from "./lib/watched-panes.js";
 import {
 	probeWatchedPanes,
 	startBackgroundWatch,
+	stopBackgroundWatch,
 	getCachedAgentStatuses,
 	requestProbe,
 } from "./lib/agents-watch.js";
+import { resolveListenAddress, isLoopbackHost } from "./lib/listen-address.js";
 
 loadDotEnv();
 
@@ -111,13 +113,22 @@ function clampUploadQuality(value: number | undefined): number {
 }
 
 const startupArgs = process.argv.slice(2);
+const listenAddress = resolveListenAddress({ argv: startupArgs, env: process.env });
 
 // ── CLI subcommand dispatch ───────────────────────────────────────────────
 // Runs before any server setup so `tmux-web add/remove/list` are fast and
 // don't try to bind a port or load the db.
 {
 	const args = startupArgs.filter((arg) => arg !== "--ghostty" && arg !== "--xterm");
-	if (args.length > 0) {
+	if (args.length === 1 && (args[0] === "-V" || args[0] === "--version" || args[0] === "-v")) {
+		printVersion();
+		process.exit(0);
+	}
+	if (args.length === 1 && (args[0] === "-h" || args[0] === "--help")) {
+		printUsage();
+		process.exit(0);
+	}
+	if (args.length > 0 && !args[0].startsWith("-")) {
 		const [sub, arg] = args;
 		switch (sub) {
 			case "add":
@@ -179,7 +190,9 @@ function sendServerMessage(ws: WebSocket, msg: ServerMessage) {
 }
 
 const activePtys = new Set<pty.IPty>();
+const activeSockets = new Set<WebSocket>();
 const extChildren: import("node:child_process").ChildProcess[] = [];
+let shuttingDown = false;
 
 // Init db and read settings before constructing the scheduler so history
 // retention (settings.scheduleHistoryDays) applies to the startup prune too.
@@ -202,7 +215,8 @@ const scheduleTimezone = typeof settings.scheduleTimezone === "string" && isVali
 	? settings.scheduleTimezone.trim()
 	: undefined;
 const scheduleAbsoluteTime = settings.scheduleAbsoluteTime === true;
-const extsDir   = path.join(process.cwd(), "extensions");
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const extsDir   = path.join(packageRoot, "extensions");
 const extensions = await loadExtensions(extsDir);
 for (const ext of extensions) {
 	if (ext.start) extChildren.push(spawnExtensionBackend(ext.dir, ext));
@@ -238,6 +252,13 @@ function recordActivePane(session: string): void {
 
 const app = new Hono();
 
+app.get("/healthz", (c) => c.json({ ok: true }));
+
+app.use("*", async (c, next) => {
+	if (shuttingDown) return c.text("server is shutting down", 503);
+	return next();
+});
+
 // CSRF defense for every state-changing request. The classic CSRF vector is a
 // cross-origin <form> POST auto-submitted by a page the user happens to be
 // visiting; here that is especially dangerous because POST /settings/plugins
@@ -261,7 +282,7 @@ registerExtensionRoutes(app, extsDir, extensions);
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const assetDirs = [
 	path.join(moduleDir, "assets"),
-	path.join(process.cwd(), "dist", "assets"),
+	path.join(packageRoot, "dist", "assets"),
 ];
 
 app.get("/assets/:file", async (c) => {
@@ -867,10 +888,17 @@ app.patch("/api/schedule/:id", async (c) => {
 
 // ── WebSocket server ───────────────────────────────────────────────────────
 
-const port = parseInt(process.env.PORT || "3000", 10);
+if (!isLoopbackHost(listenAddress.host)) {
+	console.warn(`tmux-web is listening on ${listenAddress.host}; remote access is unauthenticated.`);
+}
 
-const server = serve({ fetch: app.fetch, port }, (info) => {
-	console.log(`tmux-web running at http://localhost:${info.port}`);
+const displayHost = listenAddress.host.includes(":") ? `[${listenAddress.host}]` : listenAddress.host;
+const server = serve({ fetch: app.fetch, port: listenAddress.port, hostname: listenAddress.host }, (info) => {
+	console.log(`tmux-web running at http://${displayHost}:${info.port}`);
+});
+server.on("error", (error) => {
+	console.error(`tmux-web server error: ${error.message}`);
+	if (!shuttingDown) process.exitCode = 1;
 });
 
 // Optional always-on agent watcher: a single interval that probes only the
@@ -880,7 +908,10 @@ if (agentsBackgroundWatch) startBackgroundWatch();
 const wss = new WebSocketServer({ noServer: true });
 
 server.on("upgrade", (req, socket, head) => {
-	const url = new URL(req.url || "/", `http://${req.headers.host}`);
+	const headerHost = typeof req.headers.host === "string" && /^[^\s/]+$/.test(req.headers.host)
+		? req.headers.host
+		: `${displayHost}:${listenAddress.port}`;
+	const url = new URL(req.url || "/", `http://${headerHost}`);
 	const match = url.pathname.match(/^\/ws\/(.+)$/);
 	if (!match) {
 		socket.destroy();
@@ -892,6 +923,11 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessionName: string) => {
+	if (shuttingDown) {
+		ws.close(1013, "server is shutting down");
+		return;
+	}
+	activeSockets.add(ws);
 	let ptyProcess: pty.IPty | null = null;
 	const { initialLines, historyChunk, syncIdleMs, syncMaxMs } = terminalBufferConfig;
 
@@ -1039,6 +1075,7 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 	});
 
 	ws.on("close", () => {
+		activeSockets.delete(ws);
 		clearSyncTimers();
 		if (releaseControl) {
 			releaseControl();
@@ -1052,6 +1089,7 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 	});
 
 	ws.on("error", () => {
+		activeSockets.delete(ws);
 		clearSyncTimers();
 		if (releaseControl) {
 			releaseControl();
@@ -1065,18 +1103,69 @@ wss.on("connection", (ws: WebSocket, _req: import("http").IncomingMessage, sessi
 	});
 });
 
-function cleanup() {
-	scheduler.cleanup();
-	killAllControlClients();
-	for (const p of activePtys) {
-		try { p.kill(); } catch {}
-	}
-	activePtys.clear();
-	for (const child of extChildren) {
-		try { child.kill("SIGTERM"); } catch {}
-	}
-	process.exit(0);
+let cleanupPromise: Promise<void> | null = null;
+
+function waitForChildExit(child: import("node:child_process").ChildProcess, timeoutMs: number): Promise<void> {
+	if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+	return new Promise((resolve) => {
+		const timer = setTimeout(resolve, timeoutMs);
+		child.once("exit", () => {
+			clearTimeout(timer);
+			resolve();
+		});
+	});
 }
 
-process.on("SIGINT", cleanup);
-process.on("SIGTERM", cleanup);
+function closeHttpServer(): Promise<void> {
+	return new Promise((resolve) => {
+		if (!server.listening) {
+			resolve();
+			return;
+		}
+		server.close(() => resolve());
+		const httpServer = server as import("node:http").Server;
+		httpServer.closeIdleConnections?.();
+	});
+}
+
+function closeWebSocketServer(): Promise<void> {
+	return new Promise((resolve) => {
+		wss.close(() => resolve());
+	});
+}
+
+function cleanup(): Promise<void> {
+	if (cleanupPromise) return cleanupPromise;
+	cleanupPromise = (async () => {
+		shuttingDown = true;
+		scheduler.cleanup();
+		killAllControlClients();
+		for (const p of activePtys) {
+			try { p.kill(); } catch {}
+		}
+		activePtys.clear();
+		for (const socket of activeSockets) {
+			try { socket.close(1001, "server is shutting down"); } catch {}
+		}
+		const forceTimer = setTimeout(() => {
+			for (const socket of activeSockets) {
+				try { socket.terminate(); } catch {}
+			}
+		}, 250);
+		forceTimer.unref?.();
+		for (const child of extChildren) terminateExtensionBackend(child);
+		await Promise.all(extChildren.map((child) => waitForChildExit(child, 5000)));
+		await stopBackgroundWatch();
+		await closeWebSocketServer();
+		await closeHttpServer();
+		clearTimeout(forceTimer);
+	})();
+	return cleanupPromise;
+}
+
+function handleSignal(): void {
+	void cleanup().then(() => process.exit(0), () => process.exit(1));
+}
+
+process.on("SIGINT", handleSignal);
+process.on("SIGTERM", handleSignal);

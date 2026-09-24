@@ -192,6 +192,7 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 let cache: AgentStatus[] = [];
 let lastProbeAt = 0;
 let pendingProbe: ReturnType<typeof setTimeout> | null = null;
+let activeProbe: Promise<void> | null = null;
 
 /** Floor between event-driven probes, shared with the timer. Coalesces bursts
  * (e.g. many sessions switching windows at once) into one probe per window. */
@@ -199,9 +200,10 @@ const MIN_PROBE_INTERVAL_MS = 1500;
 
 function runProbe(): void {
 	lastProbeAt = Date.now();
-	probeWatchedPanes()
+	activeProbe = probeWatchedPanes()
 		.then((r) => { cache = r; })
-		.catch(() => { /* keep last cache */ });
+		.catch(() => {})
+		.finally(() => { activeProbe = null; });
 }
 
 /** Latest cached snapshot from the background watcher (empty if not running). */
@@ -242,4 +244,12 @@ export function startBackgroundWatch(intervalMs = 3500): void {
 	watchTimer = setInterval(runProbe, intervalMs);
 	// Don't keep the process alive solely for this timer.
 	if (typeof watchTimer.unref === 'function') watchTimer.unref();
+}
+
+export function stopBackgroundWatch(): Promise<void> {
+	if (watchTimer) clearInterval(watchTimer);
+	watchTimer = null;
+	if (pendingProbe) clearTimeout(pendingProbe);
+	pendingProbe = null;
+	return activeProbe ?? Promise.resolve();
 }

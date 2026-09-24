@@ -68,19 +68,26 @@ gh auth login
 
 No `~/.tmux-web/.env` token is required for normal interactive use on your machine.
 
-For headless or systemd deployments where interactive login is not possible, set a token in `~/.tmux-web/.env` instead (`gh` honors `GH_TOKEN`; `GITHUB_PAT` is also passed through as `GH_TOKEN`):
+For headless or service deployments where interactive login is not possible, set a token in `~/.tmux-web/.env` instead (`gh` honors `GH_TOKEN`; `GITHUB_PAT` is also passed through as `GH_TOKEN`):
 
 ```bash
 cat > ~/.tmux-web/.env <<'EOF'
 GH_TOKEN=github_pat_xxx
-PORT=9878
+TMUX_WEB_PORT=9878
 EOF
 chmod 600 ~/.tmux-web/.env
 
 tmux-web
 ```
 
-For a systemd service, use `EnvironmentFile=/home/youruser/.tmux-web/.env` (same path tmux-web reads by default). The service user must either have run `gh auth login` or have `GH_TOKEN`/`GITHUB_PAT` set in that file.
+Install the service after configuring the environment:
+
+```bash
+tmux-web service install
+tmux-web service status
+```
+
+The generated systemd unit or LaunchAgent runs as the same user and reads the same `.env` file. Keep the service bind address on loopback unless you intentionally configure an authenticated reverse proxy; see [Background service](service.md).
 
 ---
 

@@ -37,6 +37,8 @@ If the pane is on the **alternate screen** (vim, less, etc.), no snapshot is sen
 | `TMUX_WEB_HISTORY_CHUNK` | `500` | Lines fetched per scroll-up request |
 | `TMUX_WEB_SYNC_IDLE_MS` | `200` | Idle time after last PTY byte before sync ends |
 | `TMUX_WEB_SYNC_MAX_MS` | `3000` | Maximum sync duration before live forwarding |
+| `TMUX_WEB_HOST` | `127.0.0.1` | HTTP/WebSocket bind address |
+| `TMUX_WEB_PORT` | `3000` | HTTP/WebSocket port; `PORT` is a legacy fallback |
 | `TMUX_WEB_TERMINAL_RENDERER` | `xterm` | Browser renderer: `xterm` or `ghostty` |
 
 WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`. The browser renderer is isolated in the terminal client bundle so the page shell, WebSocket protocol, and tmux capture flow can survive a future renderer swap.
@@ -63,4 +65,5 @@ If tmux-web is exposed beyond localhost, treat uploads as sensitive (paths are r
 - **Notes** — Per-session and global Markdown scratchpads persist to `~/.tmux-web/db.json` via lowdb (or `~/.dev/.tmux-web/db.json` in dev mode). See [Notes](notes.md).
 - **Scheduler** — Queues `tmux send-keys` calls to fire after a delay and re-arms surviving tasks on restart. See [Scheduler](scheduler.md).
 - **Windows drawer** — On the terminal page, a header tab icon opens a drawer listing tmux windows in the current session. Tapping a row runs `tmux select-window` on the host so the attached PTY switches without mobile keybindings. List: `GET /api/session/:session/windows`; switch: `POST /api/session/:session/select-window` with body `{ windowIndex: number }`.
-- **Extensions** — Sidebar plugins run as isolated child processes; the host reverse-proxies `/ext/<id>/api/*` to each extension over a Unix socket. See [Extensions](extensions.md) for install, config, and author guide.
+- **Extensions** — Sidebar plugins run as isolated child processes; the host reverse-proxies `/ext/<id>/api/*` requests to each extension over a Unix socket. See [Extensions](extensions.md) for install, config, and author guide.
+- **Background service** — `tmux-web service install` generates a per-user systemd unit or macOS LaunchAgent with explicit runtime, home, path, and bind settings. See [Background service](service.md).

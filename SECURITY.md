@@ -37,3 +37,6 @@ and a PTY. Reports involving the following are especially relevant:
 - Path traversal or command injection via session names, file paths, or
   extension manifests
 - PTY permission handling in `scripts/fix-pty-perms.mjs`
+- Unsafe network binding through `TMUX_WEB_HOST` or background-service configuration
+
+The HTTP and WebSocket server has no built-in authentication. Keep it on loopback or place it behind an authenticated TLS reverse proxy before exposing it beyond the local machine.

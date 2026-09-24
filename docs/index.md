@@ -12,3 +12,4 @@ description: Guides for tmux-web features, extensions, and architecture.
 | [Extensions](extensions.md) | Install, configure, and build sidebar plugins |
 | [Git Workflow](extensions/git-workflow.md) | Sidebar git status, worktree handoff, commit/push |
 | [Architecture](architecture.md) | How the server, terminal, and extensions connect |
+| [Background service](service.md) | Install and manage the user service |

@@ -9,7 +9,8 @@ import {
 } from '../src/lib/listen-address.js';
 
 describe('listen address', () => {
-	it('uses loopback defaults', () => {
+	it('uses loopback defaults on port 5001', () => {
+		expect(DEFAULT_LISTEN_PORT).toBe(5001);
 		expect(resolveListenAddress({ env: {} })).toEqual({
 			host: DEFAULT_LISTEN_HOST,
 			port: DEFAULT_LISTEN_PORT,

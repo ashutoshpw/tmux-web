@@ -200,7 +200,7 @@ export function printUsage(): void {
   console.log(`tmux-web — terminal-in-the-browser for tmux
 
 Usage:
-  tmux-web                       Start the server (TMUX_WEB_HOST/TMUX_WEB_PORT, default 127.0.0.1:3000)
+  tmux-web                       Start the server (TMUX_WEB_HOST/TMUX_WEB_PORT, default 127.0.0.1:5001)
   tmux-web --host <address>      Bind to a specific address
   tmux-web --port <port>         Listen on a specific port
   tmux-web --ghostty             Start with ghostty-web instead of xterm.js
@@ -230,8 +230,8 @@ Most of these are also editable from the browser at /settings and /settings/them
 
 Env:
   TMUX_WEB_HOST=127.0.0.1        Bind address
-  TMUX_WEB_PORT=3000             Listen port
-  PORT=3000                      Legacy port fallback
+  TMUX_WEB_PORT=5001             Listen port
+  PORT=5001                      Legacy port fallback
   TMUX_WEB_TERMINAL_RENDERER=xterm|ghostty   (also persistable via /settings)
 `);
 }

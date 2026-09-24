@@ -38,7 +38,7 @@ If the pane is on the **alternate screen** (vim, less, etc.), no snapshot is sen
 | `TMUX_WEB_SYNC_IDLE_MS` | `200` | Idle time after last PTY byte before sync ends |
 | `TMUX_WEB_SYNC_MAX_MS` | `3000` | Maximum sync duration before live forwarding |
 | `TMUX_WEB_HOST` | `127.0.0.1` | HTTP/WebSocket bind address |
-| `TMUX_WEB_PORT` | `3000` | HTTP/WebSocket port; `PORT` is a legacy fallback |
+| `TMUX_WEB_PORT` | `5001` | HTTP/WebSocket port; `PORT` is a legacy fallback |
 | `TMUX_WEB_TERMINAL_RENDERER` | `xterm` | Browser renderer: `xterm` or `ghostty` |
 
 WebSocket messages are JSON: server → client `snapshot`, `data`, `history`; client → server `input`, `resize`, `load_history`. The browser renderer is isolated in the terminal client bundle so the page shell, WebSocket protocol, and tmux capture flow can survive a future renderer swap.

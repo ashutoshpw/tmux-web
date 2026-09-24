@@ -17,11 +17,11 @@ Use `--no-start` to write or refresh the registration without starting it. The n
 
 ## Address and environment
 
-The listener defaults to `127.0.0.1:3000`. Set the address with `TMUX_WEB_HOST` and `TMUX_WEB_PORT`; `PORT` remains supported as a legacy port fallback. Command-line values take precedence over environment values.
+The listener defaults to `127.0.0.1:5001`. Set the address with `TMUX_WEB_HOST` and `TMUX_WEB_PORT`; `PORT` remains supported as a legacy port fallback. Command-line values take precedence over environment values.
 
 ```sh
 TMUX_WEB_HOST=127.0.0.1
-TMUX_WEB_PORT=3000
+TMUX_WEB_PORT=5001
 ```
 
 A service install accepts a non-loopback address only with `--allow-remote`:

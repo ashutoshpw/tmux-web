@@ -22,7 +22,7 @@ bunx tmux-web
 # Interactive setup (command bar, GitHub Actions, Git Workflow — uses `gh auth login`, no token file needed locally)
 tmux-web setup
 
-# Start on default port 3000
+# Start on default port 5001
 tmux-web
 
 # Custom address and port
@@ -44,7 +44,7 @@ TMUX_WEB_TERMINAL_RENDERER=ghostty tmux-web
 TMUX_WEB_INITIAL_LINES=1000 TMUX_WEB_HISTORY_CHUNK=500 tmux-web
 ```
 
-Then open `http://127.0.0.1:3000` in your browser. You'll see a list of active tmux sessions — click one to attach.
+Then open `http://127.0.0.1:5001` in your browser. You'll see a list of active tmux sessions — click one to attach.
 
 For a persistent user service on Linux or macOS, see [Background service](docs/service.md). The service defaults to loopback; non-loopback binds are unauthenticated and require `--allow-remote` during installation.
 

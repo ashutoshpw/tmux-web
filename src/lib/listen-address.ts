@@ -1,7 +1,7 @@
 import { isIP } from 'node:net';
 
 export const DEFAULT_LISTEN_HOST = '127.0.0.1';
-export const DEFAULT_LISTEN_PORT = 3000;
+export const DEFAULT_LISTEN_PORT = 5001;
 
 export type ListenAddress = {
 	host: string;

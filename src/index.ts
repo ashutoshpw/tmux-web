@@ -76,6 +76,7 @@ import {
 	requestProbe,
 } from "./lib/agents-watch.js";
 import { resolveListenAddress, isLoopbackHost } from "./lib/listen-address.js";
+import { isServiceProcess, restartService } from "./lib/service-runtime.js";
 
 loadDotEnv();
 
@@ -206,7 +207,9 @@ db.data.uploadProcessingLogs ??= [];
 
 const settings = await readSettings();
 const activeTheme = await readActiveTheme();
-const commandbarEnabled = settings.commandbar === true;
+// Command bar defaults to ON; an explicit `commandbar: false` (setup flow or
+// settings page) opts out.
+const commandbarEnabled = settings.commandbar !== false;
 const agentsEnabled = settings.agents === true;
 const agentsBackgroundWatch = agentsEnabled && settings.agentsBackgroundWatch === true;
 const terminalRenderer = resolveTerminalRenderer(startupArgs, settings.terminalRenderer);
@@ -450,6 +453,23 @@ app.get("/api/agents", async (c) => {
 
 // ── Settings pages ───────────────────────────────────────────────────────────
 
+// Settings and theme are read once at startup, so when the server runs under
+// the tmux-web service, a save bounces the unit to apply the changes. No-op
+// when not running under the service.
+function scheduleServiceRestartIfRunning(): void {
+	void isServiceProcess().then((serviceMode) => {
+		if (!serviceMode) return;
+		// Delayed so the 303 redirect reaches the browser (and the follow-up
+		// page load is served) before the unit's SIGTERM arrives.
+		setTimeout(() => {
+			void restartService().then((issued) => {
+				if (issued) console.log("[service] settings saved — restarting service to apply them");
+				else console.error("[service] settings saved but the service restart could not be issued");
+			});
+		}, 1_500).unref();
+	});
+}
+
 app.get("/settings", async (c) => {
 	const current = await readSettings();
 	const savedRenderer = current.terminalRenderer ?? "xterm";
@@ -463,6 +483,7 @@ app.get("/settings", async (c) => {
 		uploadProcessingLogs: listUploadProcessingLogs(),
 		saved: c.req.query("saved") === "1",
 		error: c.req.query("error") ? decodeURIComponent(c.req.query("error")!) : undefined,
+		serviceMode: await isServiceProcess(),
 	}));
 });
 
@@ -506,6 +527,7 @@ app.post("/settings", async (c) => {
 			}
 			: undefined,
 	});
+	scheduleServiceRestartIfRunning();
 	return c.redirect("/settings?saved=1", 303);
 });
 
@@ -529,10 +551,11 @@ app.post("/settings/plugins", async (c) => {
 	return c.redirect("/settings?saved=1", 303);
 });
 
-app.get("/settings/theme", (c) => {
+app.get("/settings/theme", async (c) => {
 	return c.html(renderThemeSettings({
 		theme: activeTheme,
 		saved: c.req.query("saved") === "1",
+		serviceMode: await isServiceProcess(),
 	}));
 });
 
@@ -545,6 +568,7 @@ app.post("/settings/theme", async (c) => {
 		return c.redirect("/settings/theme", 303);
 	}
 	await setActiveThemeTemplate(template);
+	scheduleServiceRestartIfRunning();
 	return c.redirect("/settings/theme?saved=1", 303);
 });
 

@@ -27,6 +27,7 @@ describe('service manager', () => {
     const systemd = renderSystemdUnit({ host: '::1', port: 4321, entryPath: '/opt/tmux-web', runtimePath: '/opt/node', home: '/home/test user', logPath: '/home/test user/.tmux-web/logs/service.log' });
     expect(systemd).toContain('WorkingDirectory="/home/test user"');
     expect(systemd).toContain('TMUX_WEB_MODE=production');
+    expect(systemd).toContain('TMUX_WEB_SERVICE=1');
     const plist = renderLaunchAgent({ host: '::1', port: 4321, entryPath: '/opt/a&b', runtimePath: '/opt/node', home: '/home/test', logPath: '/home/test/logs/service.log' });
     expect(plist).toContain('/opt/a&amp;b');
     expect(plist).toContain('<key>RunAtLoad</key>');

@@ -110,9 +110,11 @@ function pageHead(title: string, theme: TmuxWebTheme): string {
 </head>`;
 }
 
-function flashes(saved: boolean, error?: string): string {
+function flashes(saved: boolean, error?: string, serviceMode = false): string {
 	let html = '';
-	if (saved) html += `<div class="saved-flash">✓ Saved. Restart tmux-web to apply.</div>`;
+	if (saved) html += serviceMode
+		? `<div class="saved-flash">✓ Saved. The tmux-web service is restarting to apply the changes.</div>`
+		: `<div class="saved-flash">✓ Saved. Restart tmux-web to apply.</div>`;
 	if (error) html += `<div class="error-flash">${escapeHtml(error)}</div>`;
 	return html;
 }
@@ -127,9 +129,10 @@ export function renderSettings(opts: {
 	uploadProcessingLogs?: UploadProcessingLogRecord[];
 	saved?: boolean;
 	error?: string;
+	serviceMode?: boolean;
 }): string {
-	const { settings, renderer, rendererOverridden, theme, plugins, imageUploadProcessors = [], uploadProcessingLogs = [], saved = false, error } = opts;
-	const commandbarOn = settings.commandbar === true;
+	const { settings, renderer, rendererOverridden, theme, plugins, imageUploadProcessors = [], uploadProcessingLogs = [], saved = false, error, serviceMode = false } = opts;
+	const commandbarOn = settings.commandbar !== false;
 	const agentsOn = settings.agents === true;
 	const agentsBackgroundWatchOn = settings.agentsBackgroundWatch === true;
 	const savedRenderer = settings.terminalRenderer ?? 'xterm';
@@ -191,11 +194,13 @@ export function renderSettings(opts: {
   </div>
 
   <div class="restart-note">
-    <strong>Note:</strong> these settings are read once at startup. You may need to
-    <strong>restart the tmux-web process</strong> after making changes for them to take effect.
+    <strong>Note:</strong> these settings are read once at startup.
+    ${serviceMode
+		? 'Saving will <strong>automatically restart the tmux-web service</strong> to apply them (takes a few seconds).'
+		: 'You may need to <strong>restart the tmux-web process</strong> after making changes for them to take effect.'}
   </div>
 
-  ${flashes(saved, error)}
+  ${flashes(saved, error, serviceMode)}
 
   <form method="POST" action="/settings">
     <div class="section">
@@ -302,8 +307,9 @@ const SWATCH_KEYS = ['background', 'foreground', 'red', 'green', 'yellow', 'blue
 export function renderThemeSettings(opts: {
 	theme: TmuxWebTheme;
 	saved?: boolean;
+	serviceMode?: boolean;
 }): string {
-	const { theme, saved = false } = opts;
+	const { theme, saved = false, serviceMode = false } = opts;
 	const templates = getThemeTemplates();
 
 	const cards = THEME_TEMPLATE_IDS.map((id) => {
@@ -331,10 +337,12 @@ export function renderThemeSettings(opts: {
 
   <div class="restart-note">
     <strong>Note:</strong> the active theme is loaded at startup.
-    <strong>Restart the tmux-web process</strong> after changing it.
+    ${serviceMode
+		? 'Changing it will <strong>automatically restart the tmux-web service</strong> (takes a few seconds).'
+		: '<strong>Restart the tmux-web process</strong> after changing it.'}
   </div>
 
-  ${flashes(saved)}
+  ${flashes(saved, undefined, serviceMode)}
 
   <form method="POST" action="/settings/theme">
     <div class="theme-grid">

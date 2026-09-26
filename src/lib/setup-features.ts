@@ -25,7 +25,7 @@ export const SETUP_FEATURES: SetupFeature[] = [
     label: 'Command bar',
     description: '⌘K session search + quick actions',
     kind: 'builtin',
-    isEnabled: (cfg) => cfg.commandbar === true,
+    isEnabled: (cfg) => cfg.commandbar !== false,
     async enable() {
       const cfg = await readSettings();
       await writeSettings({ ...cfg, commandbar: true });

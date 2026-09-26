@@ -234,6 +234,10 @@ function serviceEnvironment(input: InstallOptions, home: string): Record<string,
     HOME: home,
     PATH: [...new Set(pathEntries)].join(path.delimiter),
     TMUX_WEB_MODE: 'production',
+    // Lets the server cheaply detect that it runs under the service (settings
+    // save then auto-restarts the unit). MainPID probing in service-runtime
+    // covers units installed before this marker existed.
+    TMUX_WEB_SERVICE: '1',
     TMUX_WEB_HOST: input.host,
     TMUX_WEB_PORT: String(input.port),
   };

@@ -361,6 +361,13 @@ window.__TMUX_WEB_TERMINAL__ = ${JSON.stringify({
 	theme: theme.terminal,
 	renderer,
 }).replace(/</g, '\\u003c')};
+
+// ========== COMMANDBAR ==========
+// Registered before the terminal-client import below: the ⌘K shortcut and the
+// header button must keep working even if that import fails (e.g. stale cached
+// bundle after an upgrade).
+${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions, { sessionName }, quickCommands) : ''}
+
 await import('/assets/terminal-client.js');
 
 // ========== NOTES ==========
@@ -390,9 +397,6 @@ ${sessionsDrawerScript(sessionName)}
 
 // ========== MOBILE TOOLBAR ==========
 ${mobileToolbarScript(sessionName)}
-
-// ========== COMMANDBAR ==========
-${commandbarEnabled ? commandbarScript(commandbarSessions, commandbarActions, { sessionName }, quickCommands) : ''}
 
 // ========== NOTES ==========
 // (notes and scheduler scripts already included above — extensions below)

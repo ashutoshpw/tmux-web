@@ -58,10 +58,7 @@ export function commandbarCSS(): string {
   .cmdbar-btn:focus-visible {
     color: var(--panel-accent); outline: none;
   }
-  .cmdbar-shortcut {
-    color: inherit; border: 1px solid rgba(148, 163, 184, 0.22);
-    border-radius: 4px; padding: 2px 4px; font-size: 10px;
-  }
+  .cmdbar-btn svg { width: 15px; height: 15px; fill: currentColor; }
   .cmdbar-backdrop {
     position: fixed; inset: 0; z-index: 1400; background: rgba(2, 6, 12, 0.62);
     opacity: 0; pointer-events: none; transition: opacity 0.14s ease;
@@ -143,7 +140,7 @@ export function commandbarCSS(): string {
 
 export function commandbarButtonHTML(label = 'Sessions'): string {
 	return `<button class="cmdbar-btn" id="cmdbar-open" title="${label} (⌘K)" aria-label="${label} (⌘K)">
-    <span class="cmdbar-shortcut">⌘K</span>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3a6.5 6.5 0 0 1 5.18 10.43l4.45 4.44-1.42 1.42-4.44-4.45A6.5 6.5 0 1 1 9.5 3Zm0 2a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z"/></svg>
   </button>`;
 }
 

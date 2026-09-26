@@ -256,7 +256,12 @@ app.get("/healthz", (c) => c.json({ ok: true }));
 
 app.use("*", async (c, next) => {
 	if (shuttingDown) return c.text("server is shutting down", 503);
-	return next();
+	await next();
+	// Pages are server-rendered and reference build-specific inline code; make
+	// browsers always revalidate so an upgraded server is never mixed with a
+	// stale cached page.
+	const type = c.res.headers.get("Content-Type") ?? "";
+	if (type.startsWith("text/html")) c.res.headers.set("Cache-Control", "no-cache");
 });
 
 // CSRF defense for every state-changing request. The classic CSRF vector is a
@@ -298,8 +303,13 @@ app.get("/assets/:file", async (c) => {
 			".js": "application/javascript; charset=utf-8",
 			".map": "application/json; charset=utf-8",
 		};
+		// Hash-named chunks are immutable; the entry bundle and CSS keep stable
+		// URLs across releases, so they must revalidate (a stale entry bundle
+		// would import old hashed chunks that no longer exist).
+		const immutable = /-[0-9a-z]{8}\.(js|css)$/.test(file);
 		return c.body(content, 200, {
 			"Content-Type": mime[ext] ?? "application/octet-stream",
+			"Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
 		});
 	}
 	return c.notFound();
